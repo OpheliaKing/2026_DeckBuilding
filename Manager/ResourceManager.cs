@@ -62,6 +62,22 @@ public class ResourceManager : ManagerBase
     }
 
     /// <summary>
+    /// Addressables로 ScriptableObject를 로드합니다.
+    /// </summary>
+    public async Task<T> LoadScriptableObjectAsync<T>(string address) where T : ScriptableObject
+    {
+        return await LoadAsync<T>(address);
+    }
+
+    /// <summary>
+    /// 콜백 방식으로 ScriptableObject를 로드합니다.
+    /// </summary>
+    public void LoadScriptableObjectAsync<T>(string address, Action<T> onComplete) where T : ScriptableObject
+    {
+        LoadAsync(address, onComplete);
+    }
+
+    /// <summary>
     /// Addressables로 프리팹을 로드한 뒤 즉시 생성합니다.
     /// </summary>
     public async Task<GameObject> InstantiateAsync(

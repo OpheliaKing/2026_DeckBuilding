@@ -6,17 +6,13 @@ namespace SHIN
 {
     public class CharacterBase : MonoBehaviour
     {
-        protected int _hp;
-        protected int _maxHp;
+        private UnitInfo _unitInfo;
+        public UnitInfo UnitInfo => _unitInfo;
 
-        protected int _defense;
-        protected int _originalDefense;
-
-        protected int _attack;
-        protected int _originalAttack;
-
-        protected int _speed;
-        protected int _originalSpeed;
+        public void InitCharacter(UnitData unitData)
+        {
+            _unitInfo = new UnitInfo(unitData);
+        }
     }
 
 }
