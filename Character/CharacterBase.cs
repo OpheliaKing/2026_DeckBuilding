@@ -13,6 +13,11 @@ namespace SHIN
         {
             _unitInfo = new UnitInfo(unitData);
         }
+
+        public void InitCharacter(UnitInfo unitInfo)
+        {
+            _unitInfo = unitInfo;
+        }
     }
 
 }

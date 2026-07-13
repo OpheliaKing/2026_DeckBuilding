@@ -6,7 +6,41 @@ namespace SHIN
 {
     public partial class GameManager
     {
-        private List<CharacterBase> _playerCharacters = new List<CharacterBase>();
+        private List<UnitInfo> _playerCharacters = new List<UnitInfo>();
+        public IReadOnlyList<UnitInfo> PlayerCharacters => _playerCharacters;
+
+        private void AddPlayerCharacter(string unitTid)
+        {
+
+            if (string.IsNullOrEmpty(unitTid))
+            {
+                return;
+            }
+
+            GetSOAsync<UnitDataSO>(GameManager.Instance.UnitDataSoAddress, unitDataSO =>
+            {
+                if (unitDataSO == null)
+                {
+                    Debug.LogError("[InGameManager] UnitDataSO 로드 실패");
+                    return;
+                }
+
+                var data = unitDataSO.GetUnitData(unitTid);
+                if (data == null)
+                {
+                    Debug.LogError("[InGameManager] UnitData 로드 실패");
+                    return;
+                }
+
+                var unitInfo = new UnitInfo(data);
+                AddPlayerCharacter(unitInfo);
+            });
+        }
+
+        private void AddPlayerCharacter(UnitInfo unitInfo)
+        {
+            _playerCharacters.Add(unitInfo);
+        }
     }
 
 }

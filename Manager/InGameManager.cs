@@ -5,18 +5,19 @@ namespace SHIN
 {
     public class InGameManager : MonoBehaviour
     {
-        private const string UnitDataSoAddress = "Assets/Addressables/SO/UnitDataSO.asset";
-
+        private readonly List<CharacterBase> _playerCharacters = new();
         private readonly List<CharacterBase> _enemyCharacters = new();
 
         private GroupPosition _playerGroupPosition;
         private GroupPosition _enemyGroupPosition;
 
+        public IReadOnlyList<CharacterBase> PlayerCharacters => _playerCharacters;
         public IReadOnlyList<CharacterBase> EnemyCharacters => _enemyCharacters;
 
         public void StageInit(StageData stageData)
         {
             CacheGroupPositions();
+            PlayerSetting();
             EnemySetting(stageData);
         }
 
@@ -41,6 +42,82 @@ namespace SHIN
             }
         }
 
+        private void PlayerSetting()
+        {
+            _playerCharacters.Clear();
+
+            var playerInfos = GameManager.Instance.PlayerCharacters;
+            if (playerInfos == null || playerInfos.Count == 0)
+            {
+                Debug.LogWarning("[InGameManager] 배치할 플레이어가 없습니다.");
+                return;
+            }
+
+            if (_playerGroupPosition == null)
+            {
+                Debug.LogError("[InGameManager] PLAYER GroupPosition을 찾을 수 없습니다.");
+                return;
+            }
+
+            SpawnPlayers(playerInfos);
+        }
+
+        private async void SpawnPlayers(IReadOnlyList<UnitInfo> playerInfos)
+        {
+            Debug.Log($"[InGameManager] 플레이어 배치 시작: {playerInfos.Count}명");
+            var slots = _playerGroupPosition.GetFormationSlots(playerInfos.Count);
+            if (slots.Count == 0)
+            {
+                Debug.LogError("[InGameManager] 플레이어 포메이션 슬롯이 없습니다.");
+                return;
+            }
+
+            if (playerInfos.Count > slots.Count)
+            {
+                Debug.LogWarning(
+                    $"[InGameManager] 플레이어 수({playerInfos.Count})가 슬롯 수({slots.Count})보다 많아 일부만 배치합니다.");
+            }
+
+            var resourceManager = GameManager.Instance.ResourceManager;
+            int spawnCount = Mathf.Min(playerInfos.Count, slots.Count);
+
+            for (int i = 0; i < spawnCount; i++)
+            {
+                var unitInfo = playerInfos[i];
+                if (unitInfo?.UnitData == null)
+                    continue;
+
+                var unitData = unitInfo.UnitData;
+                if (string.IsNullOrEmpty(unitData.unitPrefabPath))
+                {
+                    Debug.LogError($"[InGameManager] unitPrefabPath가 비어 있습니다: {unitData.unitTid}");
+                    continue;
+                }
+
+                var slot = slots[i];
+                var playerObject = await resourceManager.InstantiateAsync(
+                    unitData.unitPrefabPath,
+                    slot.position,
+                    slot.rotation,
+                    slot);
+
+                if (playerObject == null)
+                {
+                    Debug.LogError($"[InGameManager] 플레이어 생성 실패: {unitData.unitTid} / {unitData.unitPrefabPath}");
+                    continue;
+                }
+
+                var character = playerObject.GetComponentInChildren<CharacterBase>();
+                if (character != null)
+                {
+                    _playerCharacters.Add(character);
+                    character.InitCharacter(unitInfo);
+                }
+            }
+
+            Debug.Log($"[InGameManager] 플레이어 배치 완료: {_playerCharacters.Count}명");
+        }
+
         private void EnemySetting(StageData stageData)
         {
             _enemyCharacters.Clear();
@@ -57,7 +134,7 @@ namespace SHIN
                 return;
             }
 
-            GameManager.Instance.GetSOAsync<UnitDataSO>(UnitDataSoAddress, unitDataSO =>
+            GameManager.Instance.GetSOAsync<UnitDataSO>(GameManager.Instance.UnitDataSoAddress, unitDataSO =>
             {
                 if (unitDataSO == null)
                 {
@@ -117,12 +194,11 @@ namespace SHIN
                 {
                     _enemyCharacters.Add(character);
                     character.InitCharacter(unitData);
-                }                    
+                }
             }
 
             Debug.Log($"[InGameManager] 적 배치 완료: {_enemyCharacters.Count}마리");
         }
-
 
         /// <summary>
         /// 인게임 모든 리소스, 데이터 정리 후 시작하는 함수

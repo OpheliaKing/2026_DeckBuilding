@@ -24,6 +24,8 @@ namespace SHIN
 
         public void Start()
         {
+            //아래 코드는 테스트용
+            AddPlayerCharacter("player_0001");
             InGameStart("stage_0001");
         }
 

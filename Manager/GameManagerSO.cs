@@ -7,6 +7,8 @@ namespace SHIN
 {
     public partial class GameManager
     {
+        private const string unitDataSoAddress = "Assets/Addressables/SO/UnitDataSO.asset";
+        public string UnitDataSoAddress => unitDataSoAddress;
         private readonly Dictionary<string, ScriptableObject> _scriptableObjects = new();
 
         /// <summary>
