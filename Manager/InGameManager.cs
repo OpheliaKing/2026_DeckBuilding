@@ -1,9 +1,11 @@
+using System.Collections;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace SHIN
 {
-    public class InGameManager : MonoBehaviour
+    public partial class InGameManager : MonoBehaviour
     {
         private readonly List<CharacterBase> _playerCharacters = new();
         private readonly List<CharacterBase> _enemyCharacters = new();
@@ -14,11 +16,25 @@ namespace SHIN
         public IReadOnlyList<CharacterBase> PlayerCharacters => _playerCharacters;
         public IReadOnlyList<CharacterBase> EnemyCharacters => _enemyCharacters;
 
+        private IEnumerator _stageSettingCo;
+
+        #region Stage Setting
+
         public void StageInit(StageData stageData)
         {
             CacheGroupPositions();
-            PlayerSetting();
-            EnemySetting(stageData);
+            _stageSettingCo = StageSettingCo(stageData);
+            StartCoroutine(_stageSettingCo);
+        }
+
+        private IEnumerator StageSettingCo(StageData stageData)
+        {
+            var playerSettingTask = PlayerSettingAsync();
+            var enemySettingTask = EnemySettingAsync(stageData);
+
+            yield return new WaitUntil(() => playerSettingTask.IsCompleted && enemySettingTask.IsCompleted);
+
+            InGameBattleStart();
         }
 
         private void CacheGroupPositions()
@@ -42,7 +58,7 @@ namespace SHIN
             }
         }
 
-        private void PlayerSetting()
+        private async Task PlayerSettingAsync()
         {
             _playerCharacters.Clear();
 
@@ -59,10 +75,10 @@ namespace SHIN
                 return;
             }
 
-            SpawnPlayers(playerInfos);
+            await SpawnPlayersAsync(playerInfos);
         }
 
-        private async void SpawnPlayers(IReadOnlyList<UnitInfo> playerInfos)
+        private async Task SpawnPlayersAsync(IReadOnlyList<UnitInfo> playerInfos)
         {
             Debug.Log($"[InGameManager] 플레이어 배치 시작: {playerInfos.Count}명");
             var slots = _playerGroupPosition.GetFormationSlots(playerInfos.Count);
@@ -116,9 +132,11 @@ namespace SHIN
             }
 
             Debug.Log($"[InGameManager] 플레이어 배치 완료: {_playerCharacters.Count}명");
+
+            //await
         }
 
-        private void EnemySetting(StageData stageData)
+        private async Task EnemySettingAsync(StageData stageData)
         {
             _enemyCharacters.Clear();
 
@@ -134,19 +152,17 @@ namespace SHIN
                 return;
             }
 
-            GameManager.Instance.GetSOAsync<UnitDataSO>(GameManager.Instance.UnitDataSoAddress, unitDataSO =>
+            var unitDataSO = await GameManager.Instance.GetSOAsync<UnitDataSO>(GameManager.Instance.UnitDataSoAddress);
+            if (unitDataSO == null)
             {
-                if (unitDataSO == null)
-                {
-                    Debug.LogError("[InGameManager] UnitDataSO 로드 실패");
-                    return;
-                }
+                Debug.LogError("[InGameManager] UnitDataSO 로드 실패");
+                return;
+            }
 
-                SpawnEnemies(stageData.enemyTids, unitDataSO);
-            });
+            await SpawnEnemiesAsync(stageData.enemyTids, unitDataSO);
         }
 
-        private async void SpawnEnemies(List<string> enemyTids, UnitDataSO unitDataSO)
+        private async Task SpawnEnemiesAsync(List<string> enemyTids, UnitDataSO unitDataSO)
         {
             var slots = _enemyGroupPosition.GetFormationSlots(enemyTids.Count);
             if (slots.Count == 0)
@@ -200,11 +216,18 @@ namespace SHIN
             Debug.Log($"[InGameManager] 적 배치 완료: {_enemyCharacters.Count}마리");
         }
 
+        #endregion
+
         /// <summary>
         /// 인게임 모든 리소스, 데이터 정리 후 시작하는 함수
         /// </summary>
         private void InGameBattleStart()
         {
+            Debug.Log("[InGameManager] 스테이지 세팅 완료. 전투 시작");
+
+            InitTurnSystem();
+            BattleStartTiming();
+            AdvanceToNextTurn();
         }
     }
 }
