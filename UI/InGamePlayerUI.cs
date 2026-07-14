@@ -190,7 +190,17 @@ namespace SHIN
 
         public void SetInteractable(bool interactable)
         {
-            // TODO: 카드 클릭/드래그 가능 여부
+            for (int i = 0; i < _handCardObjects.Count; i++)
+            {
+                if (_handCardObjects[i] == null)
+                    continue;
+
+                var cardView = _handCardObjects[i].GetComponent<InGameCardObject>();
+                if (cardView == null)
+                    cardView = _handCardObjects[i].GetComponentInChildren<InGameCardObject>(true);
+
+                cardView?.SetInteractable(interactable);
+            }
         }
 
         private void OnDestroy()

@@ -19,6 +19,7 @@ namespace SHIN
 
         private int _currentHp;
         public int CurrentHp => _currentHp;
+        public bool IsDead => _currentHp <= 0;
 
         public int CurrentAttack => CalculateCurrentAttack();
 
@@ -66,6 +67,19 @@ namespace SHIN
             }
 
             _currentHp = MaxHp;
+        }
+
+        /// <summary>
+        /// 데미지를 적용하고 실제 감소량을 반환합니다.
+        /// </summary>
+        public int ApplyDamage(int damage)
+        {
+            if (damage <= 0 || IsDead)
+                return 0;
+
+            int before = _currentHp;
+            _currentHp = Mathf.Max(0, _currentHp - damage);
+            return before - _currentHp;
         }
 
         private int CalculateMaxHp()

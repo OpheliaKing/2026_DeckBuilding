@@ -209,6 +209,7 @@ namespace SHIN
         {
             // 턴 종료 시 손패를 버린 패로 이동
             character?.UnitInfo?.DiscardAllHand();
+            ClearCardSelection();
 
             if (IsPlayerCharacter(character))
                 PlayerUI?.ClearHandUI();
