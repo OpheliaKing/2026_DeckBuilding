@@ -82,12 +82,58 @@ namespace SHIN
                 _turnEntries[i].RemainingAV = Mathf.Max(0f, _turnEntries[i].RemainingAV - elapsed);
 
             _currentTurnEntry = next;
+            ActiveTurnStartEffect(next.Character);
             RefreshTurnOrderPreview();
 
             Debug.Log(
                 $"[TurnSystem] 현재 턴: {GetCharacterName(next.Character)} (SPD {GetSpeed(next.Character)})");
 
             return next.Character;
+        }
+
+        /// <summary>
+        /// 다음 턴을 진행한 뒤, 플레이어/적에 맞는 턴 로직을 실행합니다.
+        /// </summary>
+        public CharacterBase StartNextTurn()
+        {
+            var actor = AdvanceToNextTurn();
+            if (actor == null)
+                return null;
+
+            if (IsPlayerCharacter(actor))
+                ActivePlayerTurn(actor);
+            else
+                ActiveEnemyTurn(actor);
+
+            return actor;
+        }
+
+        private bool IsPlayerCharacter(CharacterBase character)
+        {
+            if (character == null)
+                return false;
+
+            return _playerCharacters.Contains(character);
+        }
+
+        private void ActivePlayerTurn(CharacterBase character)
+        {
+            Debug.Log($"[TurnSystem] 플레이어 턴 시작: {GetCharacterName(character)}");
+            // TODO: 플레이어 입력/UI 활성화
+        }
+
+        private void ActiveEnemyTurn(CharacterBase character)
+        {
+            Debug.Log($"[TurnSystem] 적 턴 시작: {GetCharacterName(character)}");
+            // TODO: 적 AI 행동 후 EndTurn() 호출
+        }
+
+        private void ActiveTurnStartEffect(CharacterBase character)
+        {
+        }
+
+        private void ActiveTurnEndEffect(CharacterBase character)
+        {
         }
 
         /// <summary>
@@ -101,8 +147,20 @@ namespace SHIN
             if (_turnEntries.Contains(_currentTurnEntry))
                 ResetActionValue(_currentTurnEntry);
 
+            ActiveTurnEndEffect(_currentTurnEntry.Character);
+
             _currentTurnEntry = null;
             RefreshTurnOrderPreview();
+        }
+
+        /// <summary>
+        /// 플레이어/AI 공용 턴 종료.
+        /// 현재 행동자의 AV를 리셋한 뒤 다음 턴으로 진행합니다.
+        /// </summary>
+        public CharacterBase EndTurn()
+        {
+            OnActionFinished();
+            return StartNextTurn();
         }
 
         /// <summary>
@@ -207,7 +265,6 @@ namespace SHIN
             return lowest;
         }
 
-        //속도관련 함수로 속도에 관해 추가적으로 기획을 해야겠다
         private void ResetActionValue(TurnEntry entry)
         {
             int speed = GetSpeed(entry.Character);

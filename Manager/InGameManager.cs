@@ -227,7 +227,7 @@ namespace SHIN
 
             InitTurnSystem();
             BattleStartTiming();
-            AdvanceToNextTurn();
+            StartNextTurn();
         }
     }
 }
