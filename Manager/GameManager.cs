@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SHIN
@@ -19,6 +20,8 @@ namespace SHIN
         }
 
         public InGameManager InGameManager => _inGameManager;
+        
+    
 
         public void Start()
         {
@@ -27,10 +30,11 @@ namespace SHIN
             {
                 if (PlayerCharacters.Count > 0)
                 {
-                    AddCard(PlayerCharacters[0], "card_001", (unitInfo) =>
+                    var cardTids = new List<string> { "card_001", "card_001", "card_001" };
+                    AddCard(PlayerCharacters[0], cardTids, (unitInfo) =>
                     {
                         Debug.Log($"[GameManager] 카드 추가 완료: {unitInfo.DeckCardList.Count}");
-                    });;
+                    }); ;
                 }
             });
 

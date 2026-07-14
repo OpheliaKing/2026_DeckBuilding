@@ -13,8 +13,13 @@ namespace SHIN
         private GroupPosition _playerGroupPosition;
         private GroupPosition _enemyGroupPosition;
 
+        [SerializeField] private InGamePlayerUI _playerUI;
+        private GameObject _playerUIObject;
+
         public IReadOnlyList<CharacterBase> PlayerCharacters => _playerCharacters;
         public IReadOnlyList<CharacterBase> EnemyCharacters => _enemyCharacters;
+
+        public InGamePlayerUI PlayerUI => _playerUI;
 
         private IEnumerator _stageSettingCo;
 
@@ -221,13 +226,107 @@ namespace SHIN
         /// <summary>
         /// 인게임 모든 리소스, 데이터 정리 후 시작하는 함수
         /// </summary>
-        private void InGameBattleStart()
+        private async void InGameBattleStart()
         {
             Debug.Log("[InGameManager] 스테이지 세팅 완료. 전투 시작");
 
+            await EnsurePlayerUIAsync();
+            InitCombatDecks();
             InitTurnSystem();
             BattleStartTiming();
             StartNextTurn();
+        }
+
+        private async Task EnsurePlayerUIAsync()
+        {
+            if (_playerUI != null)
+                return;
+
+            var canvas = FindObjectOfType<Canvas>();
+            if (canvas == null)
+            {
+                Debug.LogError("[InGameManager] Canvas를 찾을 수 없어 PlayerUI를 생성할 수 없습니다.");
+                return;
+            }
+
+            var resourceManager = GameManager.Instance?.ResourceManager;
+            if (resourceManager == null)
+            {
+                Debug.LogError("[InGameManager] ResourceManager를 찾을 수 없습니다.");
+                return;
+            }
+
+            var playerUIObject = await resourceManager.InstantiateAsync(
+                PublicVariable.Address.PlayerUIPrefab,
+                canvas.transform);
+
+            if (playerUIObject == null)
+            {
+                Debug.LogError($"[InGameManager] PlayerUI 생성 실패: {PublicVariable.Address.PlayerUIPrefab}");
+                return;
+            }
+
+            _playerUIObject = playerUIObject;
+            _playerUI = playerUIObject.GetComponent<InGamePlayerUI>();
+            if (_playerUI == null)
+                _playerUI = playerUIObject.GetComponentInChildren<InGamePlayerUI>(true);
+
+            if (_playerUI == null)
+            {
+                Debug.LogError("[InGameManager] PlayerUI 프리팹에 InGamePlayerUI가 없습니다.");
+                resourceManager.ReleaseInstance(playerUIObject);
+                _playerUIObject = null;
+            }
+        }
+
+        private void ReleasePlayerUI()
+        {
+            if (_playerUIObject == null)
+            {
+                _playerUI = null;
+                return;
+            }
+
+            var resourceManager = GameManager.Instance?.ResourceManager;
+            if (resourceManager != null)
+                resourceManager.ReleaseInstance(_playerUIObject);
+            else
+                Destroy(_playerUIObject);
+
+            _playerUIObject = null;
+            _playerUI = null;
+        }
+
+        private void OnDestroy()
+        {
+            ReleasePlayerUI();
+        }
+
+        private void InitCombatDecks()
+        {
+            InitCombatDecksForList(_playerCharacters);
+            InitCombatDecksForList(_enemyCharacters);
+        }
+
+        private void InitCombatDecksForList(IReadOnlyList<CharacterBase> characters)
+        {
+            if (characters == null)
+                return;
+
+            for (int i = 0; i < characters.Count; i++)
+            {
+                var unitInfo = characters[i]?.UnitInfo;
+                if (unitInfo == null)
+                    continue;
+
+                if (unitInfo.DeckCardList.Count == 0)
+                {
+                    Debug.LogWarning($"[InGameManager] 마스터 덱이 비어 있습니다: {characters[i].name}");
+                    continue;
+                }
+
+                unitInfo.InitCombatDeck();
+            }
         }
     }
 }

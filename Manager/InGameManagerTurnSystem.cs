@@ -92,7 +92,7 @@ namespace SHIN
         }
 
         /// <summary>
-        /// 다음 턴을 진행한 뒤, 플레이어/적에 맞는 턴 로직을 실행합니다.
+        /// 다음 턴을 진행한 뒤, 드로우 후 플레이어/적에 맞는 턴 로직을 실행합니다.
         /// </summary>
         public CharacterBase StartNextTurn()
         {
@@ -100,12 +100,71 @@ namespace SHIN
             if (actor == null)
                 return null;
 
+            var drawnCards = DrawForTurn(actor);
+
             if (IsPlayerCharacter(actor))
-                ActivePlayerTurn(actor);
+                ActivePlayerTurn(actor, drawnCards);
             else
-                ActiveEnemyTurn(actor);
+                ActiveEnemyTurn(actor, drawnCards);
 
             return actor;
+        }
+
+        /// <summary>
+        /// 턴 시작 드로우. 카드가 없거나 UnitInfo가 없으면 빈 리스트를 반환합니다.
+        /// </summary>
+        private List<CardData> DrawForTurn(CharacterBase character)
+        {
+            var empty = new List<CardData>();
+
+            if (character == null)
+            {
+                Debug.LogError("[TurnSystem] 드로우 대상 캐릭터가 null입니다.");
+                return empty;
+            }
+
+            var unitInfo = character.UnitInfo;
+            if (unitInfo == null)
+            {
+                Debug.LogError($"[TurnSystem] UnitInfo가 없습니다: {GetCharacterName(character)}");
+                return empty;
+            }
+
+            if (unitInfo.DeckCardList.Count == 0)
+            {
+                Debug.LogWarning($"[TurnSystem] 마스터 덱이 비어 드로우할 수 없습니다: {GetCharacterName(character)}");
+                return empty;
+            }
+
+            // 전투 더미가 전부 비었는데 마스터는 있으면 재초기화
+            if (unitInfo.DrawPile.Count == 0 &&
+                unitInfo.DiscardPile.Count == 0 &&
+                unitInfo.Hand.Count == 0)
+            {
+                Debug.LogWarning($"[TurnSystem] 전투 덱이 비어 InitCombatDeck을 다시 수행합니다: {GetCharacterName(character)}");
+                unitInfo.InitCombatDeck();
+            }
+
+            if (unitInfo.DrawPile.Count == 0 && unitInfo.DiscardPile.Count == 0)
+            {
+                Debug.LogWarning($"[TurnSystem] 드로우/버린 패가 모두 비어 있습니다: {GetCharacterName(character)}");
+                return empty;
+            }
+
+            var drawnCards = unitInfo.DrawCards();
+            if (drawnCards.Count == 0)
+            {
+                Debug.LogWarning($"[TurnSystem] 드로우 결과가 0장입니다: {GetCharacterName(character)}");
+                return drawnCards;
+            }
+
+            if (drawnCards.Count < unitInfo.DrawCardCount)
+            {
+                Debug.LogWarning(
+                    $"[TurnSystem] 요청 {unitInfo.DrawCardCount}장 중 {drawnCards.Count}장만 드로우: {GetCharacterName(character)}");
+            }
+
+            return drawnCards;
         }
 
         private bool IsPlayerCharacter(CharacterBase character)
@@ -116,16 +175,30 @@ namespace SHIN
             return _playerCharacters.Contains(character);
         }
 
-        private void ActivePlayerTurn(CharacterBase character)
+        private void ActivePlayerTurn(CharacterBase character, List<CardData> drawnCards)
         {
             Debug.Log($"[TurnSystem] 플레이어 턴 시작: {GetCharacterName(character)}");
-            // TODO: 플레이어 입력/UI 활성화
+
+            var unitInfo = character.UnitInfo;
+            if (unitInfo == null)
+                return;
+
+            if (PlayerUI == null)
+            {
+                Debug.LogError("[TurnSystem] PlayerUI가 없습니다.");
+                return;
+            }
+
+            PlayerUI.SetInteractable(true);
+            PlayerUI.OnCardsDrawn(unitInfo, drawnCards);
         }
 
-        private void ActiveEnemyTurn(CharacterBase character)
+        private void ActiveEnemyTurn(CharacterBase character, List<CardData> drawnCards)
         {
-            Debug.Log($"[TurnSystem] 적 턴 시작: {GetCharacterName(character)}");
-            // TODO: 적 AI 행동 후 EndTurn() 호출
+            Debug.Log($"[TurnSystem] 적 턴 시작: {GetCharacterName(character)} / 드로우 {drawnCards?.Count ?? 0}장");
+
+            PlayerUI?.SetInteractable(false);
+            // TODO: 적 AI가 drawnCards / Hand 기반으로 행동 후 EndTurn() 호출
         }
 
         private void ActiveTurnStartEffect(CharacterBase character)
@@ -134,6 +207,11 @@ namespace SHIN
 
         private void ActiveTurnEndEffect(CharacterBase character)
         {
+            // 턴 종료 시 손패를 버린 패로 이동
+            character?.UnitInfo?.DiscardAllHand();
+
+            if (IsPlayerCharacter(character))
+                PlayerUI?.ClearHandUI();
         }
 
         /// <summary>
