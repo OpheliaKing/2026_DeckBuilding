@@ -1,0 +1,15 @@
+namespace SHIN
+{
+    /// <summary>
+    /// 공용으로 사용하는 상수/주소 모음 (SO Addressables 경로 등)
+    /// </summary>
+    public static class PublicVariable
+    {
+        public static class Address
+        {
+            public const string StageDataSO = "Assets/Addressables/SO/StageDataSO.asset";
+            public const string UnitDataSO = "Assets/Addressables/SO/UnitDataSO.asset";
+            public const string CardDataSO = "Assets/Addressables/SO/CardDataSO.asset";
+        }
+    }
+}

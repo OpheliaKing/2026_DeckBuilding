@@ -4,8 +4,6 @@ namespace SHIN
 {
     public partial class GameManager : Singleton<GameManager>
     {
-        private const string StageDataSoAddress = "Assets/Addressables/SO/StageDataSO.asset";
-
         [SerializeField] private ResourceManager _resourceManager;
 
         private GameObject _currentStageObject;
@@ -25,13 +23,23 @@ namespace SHIN
         public void Start()
         {
             //아래 코드는 테스트용
-            AddPlayerCharacter("player_0001");
+            AddPlayerCharacter("player_0001", (unitInfo) =>
+            {
+                if (PlayerCharacters.Count > 0)
+                {
+                    AddCard(PlayerCharacters[0], "card_001", (unitInfo) =>
+                    {
+                        Debug.Log($"[GameManager] 카드 추가 완료: {unitInfo.DeckCardList.Count}");
+                    });;
+                }
+            });
+
             InGameStart("stage_0001");
         }
 
         public void InGameStart(string stageTid)
         {
-            GetSOAsync<StageDataSO>(StageDataSoAddress, stageDataSO =>
+            GetSOAsync<StageDataSO>(PublicVariable.Address.StageDataSO, stageDataSO =>
             {
                 if (stageDataSO == null)
                 {

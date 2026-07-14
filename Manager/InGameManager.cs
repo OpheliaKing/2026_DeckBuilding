@@ -152,7 +152,7 @@ namespace SHIN
                 return;
             }
 
-            var unitDataSO = await GameManager.Instance.GetSOAsync<UnitDataSO>(GameManager.Instance.UnitDataSoAddress);
+            var unitDataSO = await GameManager.Instance.GetSOAsync<UnitDataSO>(PublicVariable.Address.UnitDataSO);
             if (unitDataSO == null)
             {
                 Debug.LogError("[InGameManager] UnitDataSO 로드 실패");

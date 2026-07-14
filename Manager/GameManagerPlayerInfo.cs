@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -9,7 +10,7 @@ namespace SHIN
         private List<UnitInfo> _playerCharacters = new List<UnitInfo>();
         public IReadOnlyList<UnitInfo> PlayerCharacters => _playerCharacters;
 
-        private void AddPlayerCharacter(string unitTid)
+        private void AddPlayerCharacter(string unitTid,Action<UnitInfo> onComplete = null)
         {
 
             if (string.IsNullOrEmpty(unitTid))
@@ -17,7 +18,7 @@ namespace SHIN
                 return;
             }
 
-            GetSOAsync<UnitDataSO>(GameManager.Instance.UnitDataSoAddress, unitDataSO =>
+            GetSOAsync<UnitDataSO>(PublicVariable.Address.UnitDataSO, unitDataSO =>
             {
                 if (unitDataSO == null)
                 {
@@ -34,6 +35,7 @@ namespace SHIN
 
                 var unitInfo = new UnitInfo(data);
                 AddPlayerCharacter(unitInfo);
+                onComplete?.Invoke(unitInfo);
             });
         }
 

@@ -16,6 +16,9 @@ namespace SHIN
         private UnitData _unitData;
         public UnitData UnitData => _unitData;
 
+        private List<CardData> _deckCardList = new List<CardData>();
+        public IReadOnlyList<CardData> DeckCardList => _deckCardList;
+
         private int _maxHp;
         public int MaxHp => CalculateMaxHp();
 
@@ -29,7 +32,6 @@ namespace SHIN
         public int CurrentSpeed => CalculateCurrentSpeed();
 
         private List<string> _itemList = new List<string>();
-        private List<string> _cardList = new List<string>();
 
         public void InitUnitInfo(UnitData unitData)
         {
@@ -90,6 +92,16 @@ namespace SHIN
             }
             ///아이템 계산 후 속도 반환하도록 수정
             return _unitData.unitBaseSpeed;
+        }
+
+        public void AddCard(CardData cardData)
+        {
+            if (cardData == null)
+            {
+                Debug.LogError("CardData is null");
+                return;
+            }
+            _deckCardList.Add(cardData);
         }
 
     }
