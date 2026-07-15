@@ -17,6 +17,9 @@ namespace SHIN
             public float NormalizedTime = 0.5f;
 
             public CombatJudgmentType Type = CombatJudgmentType.Hit;
+
+            [Tooltip("Hit 판정 시 카메라 흔들림. None이면 흔들지 않음")]
+            public CameraShakeLevel CameraShake = CameraShakeLevel.None;
         }
 
         [Header("Hit Setup")]
@@ -71,7 +74,7 @@ namespace SHIN
                 if (cycleTime + 1e-4f < cue.NormalizedTime)
                     break;
 
-                FireJudgment(cue.Type);
+                FireJudgment(cue.Type, cue.CameraShake);
                 _nextCueIndex++;
             }
         }
@@ -85,12 +88,12 @@ namespace SHIN
             _setupSent = true;
         }
 
-        private void FireJudgment(CombatJudgmentType type)
+        private void FireJudgment(CombatJudgmentType type, CameraShakeLevel cameraShake)
         {
             if (_character == null)
                 return;
 
-            GameManager.Instance?.InGameManager?.OnAnimCombatJudgment(_character, type, 1f);
+            GameManager.Instance?.InGameManager?.OnAnimCombatJudgment(_character, type, 1f, cameraShake);
         }
 
         private static CharacterBase ResolveCharacter(Animator animator)

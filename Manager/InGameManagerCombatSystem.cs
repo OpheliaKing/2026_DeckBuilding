@@ -288,7 +288,11 @@ namespace SHIN
         /// CombatAnimStateBehaviour 판정 큐.
         /// Setup 없이 Hit만 오면 단일 타격(전체 데미지)으로 처리합니다.
         /// </summary>
-        public void OnAnimCombatJudgment(CharacterBase source, CombatJudgmentType type, float ratio)
+        public void OnAnimCombatJudgment(
+            CharacterBase source,
+            CombatJudgmentType type,
+            float ratio,
+            CameraShakeLevel cameraShake = CameraShakeLevel.None)
         {
             if (_resolveSession == null || source == null || source != _resolveSession.User)
                 return;
@@ -299,7 +303,7 @@ namespace SHIN
             switch (type)
             {
                 case CombatJudgmentType.Hit:
-                    HandleAnimHit(session);
+                    HandleAnimHit(session, cameraShake);
                     break;
                 case CombatJudgmentType.Buff:
                     Debug.Log($"[Combat][Anim][BUFF] {card.Name} (구현 예정)");
@@ -316,7 +320,7 @@ namespace SHIN
             }
         }
 
-        private void HandleAnimHit(CardResolveSession session)
+        private void HandleAnimHit(CardResolveSession session, CameraShakeLevel cameraShake)
         {
             if (session.Card.CardType != CARD_TYPE.ATTACK)
                 return;
@@ -342,10 +346,13 @@ namespace SHIN
 
             int portion = session.HitDamages[session.NextHitIndex];
             session.NextHitIndex++;
-            ApplyAttackHitDamage(session, portion);
+            ApplyAttackHitDamage(session, portion, cameraShake);
         }
 
-        private void ApplyAttackHitDamage(CardResolveSession session, int damage)
+        private void ApplyAttackHitDamage(
+            CardResolveSession session,
+            int damage,
+            CameraShakeLevel cameraShake = CameraShakeLevel.None)
         {
             if (session?.Target == null || damage < 0)
                 return;
@@ -357,6 +364,9 @@ namespace SHIN
             Debug.Log(
                 $"[Combat][HIT] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} / " +
                 $"히트데미지:{applied} / 남은HP:{session.Target.UnitInfo.CurrentHp}");
+
+            if (cameraShake != CameraShakeLevel.None)
+                GameManager.Instance?.CameraManager?.Shake(cameraShake);
         }
 
         private void FinishCardResolve(CardResolveSession session)

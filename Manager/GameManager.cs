@@ -6,6 +6,7 @@ namespace SHIN
     public partial class GameManager : Singleton<GameManager>
     {
         [SerializeField] private ResourceManager _resourceManager;
+        [SerializeField] private CameraManager _cameraManager;
 
         private GameObject _currentStageObject;
         private InGameManager _inGameManager;
@@ -16,6 +17,15 @@ namespace SHIN
             {
                 ManagerBase.EnsureManager(transform, ref _resourceManager);
                 return _resourceManager;
+            }
+        }
+
+        public CameraManager CameraManager
+        {
+            get
+            {
+                ManagerBase.EnsureManager(transform, ref _cameraManager);
+                return _cameraManager;
             }
         }
 
