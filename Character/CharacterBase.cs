@@ -30,7 +30,15 @@ namespace SHIN
             if (_unitInfo == null || IsDead)
                 return 0;
 
-            return _unitInfo.ApplyDamage(damage);
+            int applied = _unitInfo.ApplyDamage(damage);
+            if (applied > 0)
+                PlayHitAnimation();
+
+            // 사망 순간부터 디졸브 (카드 애니가 끝날 때까지 기다리지 않음)
+            if (applied > 0 && IsDead && !_isDissolving)
+                StartCoroutine(PlayDeathDissolve());
+
+            return applied;
         }
 
         /// <summary>

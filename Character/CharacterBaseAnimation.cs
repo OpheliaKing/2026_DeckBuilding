@@ -18,11 +18,24 @@ namespace SHIN
             }
         }
 
+        public const string HitAnimationName = "Hit";
+
         /// <summary>
         /// 카드 애니메이션 재생. 없으면 false.
         /// 데미지/버프 판정은 Animator 상태의 CombatAnimStateBehaviour에서 처리합니다.
         /// </summary>
         public bool TryPlayCardAnimation(string animationName)
+        {
+            return TryPlayAnimation(animationName);
+        }
+
+        /// <summary>피격 시 Hit 애니메이션 재생</summary>
+        public bool PlayHitAnimation()
+        {
+            return TryPlayAnimation(HitAnimationName);
+        }
+
+        public bool TryPlayAnimation(string animationName)
         {
             if (string.IsNullOrEmpty(animationName))
                 return false;

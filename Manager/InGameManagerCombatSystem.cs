@@ -512,8 +512,37 @@ namespace SHIN
             _playerCharacters.Remove(character);
             _enemyCharacters.Remove(character);
 
-            character.gameObject.SetActive(false);
+            // 클릭 불가
+            var cols = character.GetComponentsInChildren<Collider>(true);
+            for (int i = 0; i < cols.Length; i++)
+                cols[i].enabled = false;
+
+            var cols2d = character.GetComponentsInChildren<Collider2D>(true);
+            for (int i = 0; i < cols2d.Length; i++)
+                cols2d[i].enabled = false;
+
+            StartCoroutine(ProcessDeathRoutine(character));
             CheckBattleEnd();
+        }
+
+        private IEnumerator ProcessDeathRoutine(CharacterBase character)
+        {
+            if (character == null)
+                yield break;
+
+            // TakeDamage에서 이미 디졸브 시작했으면 끝날 때까지 대기
+            if (character.IsDissolving)
+            {
+                while (character != null && character.IsDissolving)
+                    yield return null;
+            }
+            else
+            {
+                yield return character.PlayDeathDissolve();
+            }
+
+            if (character != null)
+                character.gameObject.SetActive(false);
         }
 
         private void CheckBattleEnd()
