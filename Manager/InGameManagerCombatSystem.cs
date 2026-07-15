@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -8,13 +9,28 @@ namespace SHIN
         private InGameCardObject _selectedCardObject;
         private CardData _selectedCard;
         private bool _isWaitingForTarget;
+        private bool _isResolvingCard;
+        private CardResolveSession _resolveSession;
 
         public CardData SelectedCard => _selectedCard;
         public bool IsWaitingForTarget => _isWaitingForTarget;
+        public bool IsResolvingCard => _isResolvingCard;
+
+        private sealed class CardResolveSession
+        {
+            public CharacterBase User;
+            public CharacterBase Target;
+            public CardData Card;
+            public int TotalDamage;
+            public float[] HitWeights;
+            public int[] HitDamages;
+            public int NextHitIndex;
+            public bool SetupReceived;
+        }
 
         private void Update()
         {
-            if (!_isWaitingForTarget)
+            if (!_isWaitingForTarget || _isResolvingCard)
                 return;
 
             if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
@@ -27,7 +43,6 @@ namespace SHIN
             if (!Input.GetMouseButtonDown(0))
                 return;
 
-            // UI 위 클릭은 대상 선택으로 처리하지 않음 (카드 UI 등과 구분)
             if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
                 return;
 
@@ -36,11 +51,14 @@ namespace SHIN
                 OnCombatTargetSelected(target);
         }
 
-        /// <summary>
-        /// 손패 카드 클릭. 카드 선택 후 대상 선택 대기 상태로 전환합니다.
-        /// </summary>
         public void OnCardClicked(InGameCardObject cardObject)
         {
+            if (_isResolvingCard)
+            {
+                Debug.LogWarning("[Combat] 카드 연출 중에는 선택할 수 없습니다.");
+                return;
+            }
+
             if (cardObject == null || cardObject.CardData == null)
             {
                 Debug.LogWarning("[Combat] 유효하지 않은 카드입니다.");
@@ -59,7 +77,6 @@ namespace SHIN
                 return;
             }
 
-            // 같은 카드를 다시 클릭하면 선택 취소
             if (_isWaitingForTarget &&
                 (_selectedCardObject == cardObject || _selectedCard == cardObject.CardData))
             {
@@ -81,9 +98,6 @@ namespace SHIN
             Debug.Log($"[Combat] 대상 선택 대기 중... (타입: {card?.CardType}) / 우클릭·Esc 취소");
         }
 
-        /// <summary>
-        /// 카메라 레이캐스트로 CharacterBase를 찾습니다.
-        /// </summary>
         private CharacterBase RaycastCharacterFromCamera()
         {
             var cam = Camera.main;
@@ -113,11 +127,11 @@ namespace SHIN
             return null;
         }
 
-        /// <summary>
-        /// 대상 선택 완료 후 카드 타입에 맞게 사용합니다.
-        /// </summary>
         public void OnCombatTargetSelected(CharacterBase target)
         {
+            if (_isResolvingCard)
+                return;
+
             if (!_isWaitingForTarget || _selectedCard == null)
             {
                 Debug.LogWarning("[Combat] 카드가 선택되지 않은 상태에서 대상을 선택할 수 없습니다.");
@@ -152,36 +166,211 @@ namespace SHIN
         }
 
         /// <summary>
-        /// CARD_TYPE에 따라 카드 효과를 분기합니다.
+        /// UseCard → 애니 재생(없으면 즉시 효과) → 애니 판정 타이밍에 효과 → 종료 후 소모/사망 처리
         /// </summary>
         private void UseCard(CharacterBase user, CharacterBase target, CardData card)
         {
-            switch (card.CardType)
+            if (user == null || target == null || card == null)
+            {
+                Debug.LogError("[Combat] UseCard 인자가 null입니다.");
+                return;
+            }
+
+            StartCoroutine(UseCardRoutine(user, target, card));
+        }
+
+        private IEnumerator UseCardRoutine(CharacterBase user, CharacterBase target, CardData card)
+        {
+            if (_isResolvingCard)
+            {
+                Debug.LogWarning("[Combat] 이미 카드 연출 중입니다.");
+                yield break;
+            }
+
+            _isResolvingCard = true;
+            _resolveSession = CreateResolveSession(user, target, card);
+
+            bool hasAnim = !string.IsNullOrEmpty(card.AnimationName) &&
+                           user.TryPlayCardAnimation(card.AnimationName);
+
+            if (!hasAnim)
+            {
+                ApplyImmediateCardEffect(_resolveSession);
+                FinishCardResolve(_resolveSession);
+                _resolveSession = null;
+                _isResolvingCard = false;
+                yield break;
+            }
+
+            Debug.Log($"[Combat] 애니 재생: {card.AnimationName} / {card.Name}");
+            yield return user.WaitCurrentAnimationEnd(card.AnimationName);
+
+            if (_resolveSession != null &&
+                _resolveSession.Card.CardType == CARD_TYPE.ATTACK &&
+                _resolveSession.HitDamages != null &&
+                _resolveSession.NextHitIndex < _resolveSession.HitDamages.Length)
+            {
+                Debug.LogWarning(
+                    $"[Combat] Hit 판정 부족: {_resolveSession.NextHitIndex}/{_resolveSession.HitDamages.Length}. " +
+                    "남은 히트 데미지는 적용되지 않습니다. CombatAnimStateBehaviour의 HitWeights/Judgments를 확인하세요.");
+            }
+
+            FinishCardResolve(_resolveSession);
+            _resolveSession = null;
+            _isResolvingCard = false;
+        }
+
+        private CardResolveSession CreateResolveSession(CharacterBase user, CharacterBase target, CardData card)
+        {
+            var session = new CardResolveSession
+            {
+                User = user,
+                Target = target,
+                Card = card,
+            };
+
+            if (card.CardType == CARD_TYPE.ATTACK)
+            {
+                int damage = CalculateDamage(user, target, card);
+                session.TotalDamage = ApplyAttackExtraEffects(user, target, card, damage);
+            }
+
+            return session;
+        }
+
+        private void ApplyImmediateCardEffect(CardResolveSession session)
+        {
+            if (session == null)
+                return;
+
+            switch (session.Card.CardType)
             {
                 case CARD_TYPE.ATTACK:
-                    ProcessAttack(user, target, card);
+                    ApplyAttackHitDamage(session, session.TotalDamage);
                     break;
-
                 case CARD_TYPE.DEFENSE:
-                    ProcessDefense(user, target, card);
+                    Debug.Log($"[Combat][DEFENSE] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} (구현 예정)");
                     break;
-
                 case CARD_TYPE.BUFF:
-                    ProcessBuff(user, target, card);
+                    Debug.Log($"[Combat][BUFF] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} (구현 예정)");
                     break;
-
                 case CARD_TYPE.DEBUFF:
-                    ProcessDebuff(user, target, card);
+                    Debug.Log($"[Combat][DEBUFF] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} (구현 예정)");
                     break;
-
                 case CARD_TYPE.SPECIAL:
-                    ProcessSpecial(user, target, card);
+                    Debug.Log($"[Combat][SPECIAL] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} (구현 예정)");
                     break;
-
                 default:
-                    Debug.LogWarning($"[Combat] 지원하지 않는 카드 타입: {card.CardType}");
+                    Debug.LogWarning($"[Combat] 지원하지 않는 카드 타입: {session.Card.CardType}");
                     break;
             }
+        }
+
+        /// <summary>
+        /// CombatAnimStateBehaviour OnStateEnter → HitWeightsCsv
+        /// </summary>
+        public void OnAnimCombatSetup(CharacterBase source, string ratiosCsv)
+        {
+            if (_resolveSession == null || source == null || source != _resolveSession.User)
+                return;
+
+            var weights = CombatDamageSplit.ParseWeightsCsv(ratiosCsv);
+            _resolveSession.HitWeights = weights;
+            _resolveSession.HitDamages = CombatDamageSplit.SplitByWeights(_resolveSession.TotalDamage, weights);
+            _resolveSession.NextHitIndex = 0;
+            _resolveSession.SetupReceived = true;
+
+            Debug.Log(
+                $"[Combat] Hit Setup: [{string.Join(",", weights)}] → 데미지조각 [{string.Join(",", _resolveSession.HitDamages)}] / 총합:{_resolveSession.TotalDamage}");
+        }
+
+        /// <summary>
+        /// CombatAnimStateBehaviour 판정 큐.
+        /// Setup 없이 Hit만 오면 단일 타격(전체 데미지)으로 처리합니다.
+        /// </summary>
+        public void OnAnimCombatJudgment(CharacterBase source, CombatJudgmentType type, float ratio)
+        {
+            if (_resolveSession == null || source == null || source != _resolveSession.User)
+                return;
+
+            var session = _resolveSession;
+            var card = session.Card;
+
+            switch (type)
+            {
+                case CombatJudgmentType.Hit:
+                    HandleAnimHit(session);
+                    break;
+                case CombatJudgmentType.Buff:
+                    Debug.Log($"[Combat][Anim][BUFF] {card.Name} (구현 예정)");
+                    break;
+                case CombatJudgmentType.Debuff:
+                    Debug.Log($"[Combat][Anim][DEBUFF] {card.Name} (구현 예정)");
+                    break;
+                case CombatJudgmentType.Defense:
+                    Debug.Log($"[Combat][Anim][DEFENSE] {card.Name} (구현 예정)");
+                    break;
+                case CombatJudgmentType.Special:
+                    Debug.Log($"[Combat][Anim][SPECIAL] {card.Name} (구현 예정)");
+                    break;
+            }
+        }
+
+        private void HandleAnimHit(CardResolveSession session)
+        {
+            if (session.Card.CardType != CARD_TYPE.ATTACK)
+                return;
+
+            if (session.Target == null || session.Target.IsDead)
+                return;
+
+            // Setup이 없으면 단일 타격
+            if (!session.SetupReceived || session.HitDamages == null)
+            {
+                session.HitWeights = new[] { 1f };
+                session.HitDamages = new[] { session.TotalDamage };
+                session.NextHitIndex = 0;
+                session.SetupReceived = true;
+                Debug.LogWarning("[Combat] HitWeights Setup 없이 Hit → 전체 데미지 1회 적용");
+            }
+
+            if (session.NextHitIndex >= session.HitDamages.Length)
+            {
+                Debug.LogWarning("[Combat] Setup된 Hit 횟수를 초과했습니다.");
+                return;
+            }
+
+            int portion = session.HitDamages[session.NextHitIndex];
+            session.NextHitIndex++;
+            ApplyAttackHitDamage(session, portion);
+        }
+
+        private void ApplyAttackHitDamage(CardResolveSession session, int damage)
+        {
+            if (session?.Target == null || damage < 0)
+                return;
+
+            if (session.Target.IsDead)
+                return;
+
+            int applied = session.Target.TakeDamage(damage);
+            Debug.Log(
+                $"[Combat][HIT] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} / " +
+                $"히트데미지:{applied} / 남은HP:{session.Target.UnitInfo.CurrentHp}");
+        }
+
+        private void FinishCardResolve(CardResolveSession session)
+        {
+            if (session == null)
+                return;
+
+            ConsumePlayedCard(session.User, session.Card);
+
+            if (session.Target != null && session.Target.IsDead)
+                ProcessDeath(session.Target);
+
+            if (session.User != null && session.User.IsDead)
+                ProcessDeath(session.User);
         }
 
         private bool IsValidTarget(CharacterBase user, CharacterBase target, CardData card)
@@ -221,71 +410,30 @@ namespace SHIN
             _isWaitingForTarget = false;
         }
 
-        /// <summary>
-        /// 공격 처리: 추가효과 → 데미지 적용 → 카드 소모 → 사망 처리
-        /// </summary>
+        /// <summary>외부/테스트용. 애니 없이 즉시 공격 1회 처리합니다.</summary>
         public void ProcessAttack(CharacterBase attacker, CharacterBase defender, CardData card)
         {
-            if (attacker == null || defender == null || card == null)
-            {
-                Debug.LogError("[Combat] ProcessAttack 인자가 null입니다.");
-                return;
-            }
-
-            if (attacker.UnitInfo == null || defender.UnitInfo == null)
-            {
-                Debug.LogError("[Combat] UnitInfo가 없습니다.");
-                return;
-            }
-
-            if (attacker.IsDead || defender.IsDead)
-            {
-                Debug.LogWarning("[Combat] 사망한 유닛은 공격/피격할 수 없습니다.");
-                return;
-            }
-
-            int damage = CalculateDamage(attacker, defender, card);
-            damage = ApplyAttackExtraEffects(attacker, defender, card, damage);
-
-            int applied = defender.TakeDamage(damage);
-            Debug.Log(
-                $"[Combat][ATTACK] {GetCombatName(attacker)} → {GetCombatName(defender)} / {card.Name} / 데미지:{applied} / 남은HP:{defender.UnitInfo.CurrentHp}");
-
-            ConsumePlayedCard(attacker, card);
-
-            if (defender.IsDead)
-                ProcessDeath(defender);
-
-            if (attacker.IsDead)
-                ProcessDeath(attacker);
+            UseCard(attacker, defender, card);
         }
 
         private void ProcessDefense(CharacterBase user, CharacterBase target, CardData card)
         {
-            Debug.Log($"[Combat][DEFENSE] {GetCombatName(user)} → {GetCombatName(target)} / {card.Name} (구현 예정)");
-            // TODO: 방어력 증가 등
-            ConsumePlayedCard(user, card);
+            UseCard(user, target, card);
         }
 
         private void ProcessBuff(CharacterBase user, CharacterBase target, CardData card)
         {
-            Debug.Log($"[Combat][BUFF] {GetCombatName(user)} → {GetCombatName(target)} / {card.Name} (구현 예정)");
-            // TODO: 버프 적용
-            ConsumePlayedCard(user, card);
+            UseCard(user, target, card);
         }
 
         private void ProcessDebuff(CharacterBase user, CharacterBase target, CardData card)
         {
-            Debug.Log($"[Combat][DEBUFF] {GetCombatName(user)} → {GetCombatName(target)} / {card.Name} (구현 예정)");
-            // TODO: 디버프 적용
-            ConsumePlayedCard(user, card);
+            UseCard(user, target, card);
         }
 
         private void ProcessSpecial(CharacterBase user, CharacterBase target, CardData card)
         {
-            Debug.Log($"[Combat][SPECIAL] {GetCombatName(user)} → {GetCombatName(target)} / {card.Name} (구현 예정)");
-            // TODO: 특수 효과
-            ConsumePlayedCard(user, card);
+            UseCard(user, target, card);
         }
 
         private int CalculateDamage(CharacterBase attacker, CharacterBase defender, CardData card)

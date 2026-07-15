@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace SHIN
 {
-    public class CharacterBase : MonoBehaviour
+    public partial class CharacterBase : MonoBehaviour
     {
         private UnitInfo _unitInfo;
         public UnitInfo UnitInfo => _unitInfo;
