@@ -4,7 +4,7 @@ namespace SHIN
 {
     /// <summary>
     /// lilToon Dissolve만 사용합니다.
-    /// Cutout/Transparent (LIL_RENDER != 0) 에서만 구멍 디졸브가 동작합니다.
+    /// Opaque(LIL_RENDER==0)에서는 디졸브가 무시되므로 Cutout으로 전환합니다.
     /// </summary>
     public static class LilToonDissolveUtility
     {
@@ -15,8 +15,11 @@ namespace SHIN
         public static readonly int DissolveMaskId = Shader.PropertyToID("_DissolveMask");
         public static readonly int InvisibleId = Shader.PropertyToID("_Invisible");
         public static readonly int CutoffId = Shader.PropertyToID("_Cutoff");
+        public static readonly int IdMaskControlsDissolveId = Shader.PropertyToID("_IDMaskControlsDissolve");
 
         private static Texture2D _fallbackNoise;
+        private static Shader _cachedCutout;
+        private static Shader _cachedTransparent;
 
         public static bool IsLilToonMaterial(Material material)
         {
@@ -38,30 +41,33 @@ namespace SHIN
             if (shaderName == "Unlit/Color" || shaderName.Contains("Hidden/Internal"))
                 return false;
 
-            // Opaque 패스(LIL_RENDER==0)는 Dissolve 코드가 스킵됨
-            bool looksOpaque =
-                shaderName.IndexOf("Opaque", System.StringComparison.OrdinalIgnoreCase) >= 0 &&
-                shaderName.IndexOf("Cutout", System.StringComparison.OrdinalIgnoreCase) < 0 &&
-                shaderName.IndexOf("Transparent", System.StringComparison.OrdinalIgnoreCase) < 0 &&
-                shaderName != "lilToon"; // 기본 lilToon은 Opaque일 수 있음
-
-            if (looksOpaque || shaderName == "lilToon" || shaderName == "Hidden/lilToon")
+            if (!IsAlphaCapableLilToon(shaderName))
             {
-                // Cutout 셰이더로 전환 시도 (Dissolve 필수)
-                var cutout = Shader.Find("Hidden/lilToonCutout");
+                var cutout = GetLilShader("Hidden/lilToonCutout", ref _cachedCutout);
                 if (cutout != null)
+                {
                     material.shader = cutout;
+                }
                 else
                 {
-                    Debug.LogWarning($"[Dissolve] Cutout lilToon이 필요합니다: {material.name} / {shaderName}");
-                    return false;
+                    var transparent = GetLilShader("Hidden/lilToonTransparent", ref _cachedTransparent);
+                    if (transparent == null)
+                        transparent = GetLilShader("Hidden/lilToonOnePassTransparent", ref _cachedTransparent);
+
+                    if (transparent == null)
+                    {
+                        Debug.LogWarning($"[Dissolve] Cutout/Transparent lilToon 필요: {material.name} / {shaderName}");
+                        return false;
+                    }
+
+                    material.shader = transparent;
                 }
             }
 
             var noise = noiseOverride != null ? noiseOverride : GetFallbackNoise();
             if (noise != null)
             {
-                // Mask/Noise가 비면 Alpha 모드에서 통째로 잘리거나 패턴이 없음
+                // Mask가 white면 Border를 올려도 구멍이 거의 안 남 → 반드시 노이즈 텍스처 지정
                 if (material.HasProperty(DissolveMaskId))
                     material.SetTexture(DissolveMaskId, noise);
                 if (material.HasProperty(DissolveNoiseMaskId))
@@ -69,15 +75,17 @@ namespace SHIN
             }
 
             if (material.HasProperty(DissolveNoiseStrengthId))
-                material.SetFloat(DissolveNoiseStrengthId, Mathf.Lerp(0.25f, 0.95f, Mathf.Clamp01(noiseStrength)));
+                material.SetFloat(DissolveNoiseStrengthId, Mathf.Lerp(0.35f, 1.0f, Mathf.Clamp01(noiseStrength)));
 
             if (material.HasProperty(DissolveColorId))
                 material.SetColor(DissolveColorId, edgeColor);
 
-            // Mode=1(Alpha), Shape=0, Border=-1(완전 유지), Blur
-            material.SetVector(DissolveParamsId, new Vector4(1f, 0f, -1f, 0.12f));
+            if (material.HasProperty(IdMaskControlsDissolveId))
+                material.SetFloat(IdMaskControlsDissolveId, 0f);
 
-            // Cutout이 알파를 너무 세게 자르지 않도록
+            // Mode=1(Alpha), Shape=0, Border=-1(완전 유지), Blur
+            material.SetVector(DissolveParamsId, new Vector4(1f, 0f, -1f, 0.15f));
+
             if (material.HasProperty(CutoffId))
                 material.SetFloat(CutoffId, 0.01f);
 
@@ -93,8 +101,8 @@ namespace SHIN
                 return;
 
             amount01 = Mathf.Clamp01(amount01);
-            // Border -1 → 1.35 (노이즈 포함 완전 소멸)
-            float border = Mathf.Lerp(-1f, 1.35f, amount01);
+            // Border -1 → 2 (완전 소멸). 1.35는 마스크/노이즈 조합에 따라 덜 녹을 수 있음
+            float border = Mathf.Lerp(-1f, 2f, amount01);
             float w = Mathf.Clamp(blur, 0.05f, 0.45f);
             material.SetVector(DissolveParamsId, new Vector4(1f, 0f, border, w));
         }
@@ -107,7 +115,36 @@ namespace SHIN
             if (material.HasProperty(InvisibleId))
                 material.SetFloat(InvisibleId, invisible ? 1f : 0f);
             else if (invisible && material.HasProperty(DissolveParamsId))
-                material.SetVector(DissolveParamsId, new Vector4(1f, 0f, 1.5f, 0.05f));
+                material.SetVector(DissolveParamsId, new Vector4(1f, 0f, 2f, 0.05f));
+        }
+
+        private static bool IsAlphaCapableLilToon(string shaderName)
+        {
+            return shaderName.IndexOf("Cutout", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   shaderName.IndexOf("Transparent", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static Shader GetLilShader(string shaderName, ref Shader cache)
+        {
+            if (cache != null)
+                return cache;
+
+            cache = Shader.Find(shaderName);
+            if (cache != null)
+                return cache;
+
+            // Hidden 셰이더는 Shader.Find가 null을 주는 경우가 있어 로드된 셰이더에서 재탐색
+            var all = Resources.FindObjectsOfTypeAll<Shader>();
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] != null && all[i].name == shaderName)
+                {
+                    cache = all[i];
+                    return cache;
+                }
+            }
+
+            return null;
         }
 
         private static Texture2D GetFallbackNoise()

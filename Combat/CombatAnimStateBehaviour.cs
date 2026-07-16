@@ -5,7 +5,7 @@ namespace SHIN
 {
     /// <summary>
     /// Animator 상태에 붙여 전투 판정을 보냅니다.
-    /// Animator Controller → 해당 Attack State → Add Behaviour → CombatAnimStateBehaviour
+    /// 여러 State를 하나의 논리 애니로 묶을 때 AnimName을 같게 설정하세요. (예: Attack001)
     /// </summary>
     public class CombatAnimStateBehaviour : StateMachineBehaviour
     {
@@ -22,8 +22,13 @@ namespace SHIN
             public CameraShakeLevel CameraShake = CameraShakeLevel.None;
         }
 
+        [Header("Logical Anim")]
+        [Tooltip("카드 AnimationName과 동일한 논리 이름. 비우면 Animator State 이름을 사용합니다.")]
+        [SerializeField]
+        private string _animName;
+
         [Header("Hit Setup")]
-        [Tooltip("히트 배율 CSV. 예: 1,1,2 → 총 데미지를 1:1:2로 분할")]
+        [Tooltip("히트 배율 CSV. 예: 1,1,2. 비우면 Setup을 보내지 않습니다(분할 State 후반부용).")]
         [SerializeField]
         private string _hitWeightsCsv = "1";
 
@@ -32,7 +37,10 @@ namespace SHIN
         [SerializeField]
         private JudgmentCue[] _judgments = Array.Empty<JudgmentCue>();
 
+        public string AnimName => _animName;
+
         private CharacterBase _character;
+        private string _resolvedAnimName;
         private bool _setupSent;
         private int _nextCueIndex;
         private float _lastNormalizedTime;
@@ -43,8 +51,13 @@ namespace SHIN
             _setupSent = false;
             _nextCueIndex = 0;
             _lastNormalizedTime = 0f;
+            _resolvedAnimName = ResolveAnimName(stateInfo);
 
             SortJudgmentsByTime();
+
+            if (_character != null && !string.IsNullOrEmpty(_resolvedAnimName))
+                _character.NotifyCombatAnimEnter(_resolvedAnimName);
+
             SendSetup();
         }
 
@@ -79,9 +92,32 @@ namespace SHIN
             }
         }
 
+        public override void OnStateExit(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
+        {
+            if (_character == null)
+                _character = ResolveCharacter(animator);
+
+            if (_character != null && !string.IsNullOrEmpty(_resolvedAnimName))
+                _character.NotifyCombatAnimExit(_resolvedAnimName);
+        }
+
+        private string ResolveAnimName(AnimatorStateInfo stateInfo)
+        {
+            if (!string.IsNullOrEmpty(_animName))
+                return _animName;
+
+            // State 이름 해시는 직접 복원이 어려워, 비어 있으면 빈 문자열
+            // (대기 쪽은 State 이름 IsName 폴백을 사용)
+            return _animName;
+        }
+
         private void SendSetup()
         {
             if (_setupSent || _character == null)
+                return;
+
+            // 비어 있으면 Setup 생략 → 분할 State 후반에서 Hit 인덱스 리셋 방지
+            if (string.IsNullOrWhiteSpace(_hitWeightsCsv))
                 return;
 
             GameManager.Instance?.InGameManager?.OnAnimCombatSetup(_character, _hitWeightsCsv);

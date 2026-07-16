@@ -47,6 +47,10 @@ namespace SHIN
         [Range(0f, 1f)]
         private float _directionRandomness = 0.25f;
 
+        [Header("Test (Play Mode)")]
+        [SerializeField]
+        private CameraShakeLevel _testShakeLevel = CameraShakeLevel.Level1;
+
         private void Awake()
         {
             EnsureImpulseSource();
@@ -75,6 +79,31 @@ namespace SHIN
             }
 
             Shake((CameraShakeLevel)level);
+        }
+
+        /// <summary>Inspector Test Level 기준으로 현재 프리셋 값을 즉시 재생합니다.</summary>
+        [ContextMenu("Test Shake (Selected Level)")]
+        public void TestShakeSelected()
+        {
+            EnsureImpulseSource();
+            Shake(_testShakeLevel);
+            Debug.Log($"[CameraManager] Test Shake: {_testShakeLevel}");
+        }
+
+        [ContextMenu("Test Shake / Level1")]
+        public void TestShakeLevel1() => TestShake(CameraShakeLevel.Level1);
+
+        [ContextMenu("Test Shake / Level2")]
+        public void TestShakeLevel2() => TestShake(CameraShakeLevel.Level2);
+
+        [ContextMenu("Test Shake / Level3")]
+        public void TestShakeLevel3() => TestShake(CameraShakeLevel.Level3);
+
+        public void TestShake(CameraShakeLevel level)
+        {
+            EnsureImpulseSource();
+            Shake(level);
+            Debug.Log($"[CameraManager] Test Shake: {level}");
         }
 
         private void FireImpulse(CameraShakePreset preset)

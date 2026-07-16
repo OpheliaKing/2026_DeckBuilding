@@ -11,14 +11,11 @@ namespace SHIN
         private float _deathDissolveDuration = 1.5f;
 
         [SerializeField]
-        private AnimationCurve _deathDissolveCurve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
-
-        [SerializeField]
         private Color _deathDissolveEdgeColor = new Color(2.2f, 0.85f, 0.25f, 1f);
 
         [SerializeField]
         [Range(0f, 1f)]
-        private float _deathDissolveNoiseStrength = 0.55f;
+        private float _deathDissolveNoiseStrength = 0.7f;
 
         [SerializeField]
         private float _deathDissolveBlur = 0.18f;
@@ -27,30 +24,37 @@ namespace SHIN
         private Texture _deathDissolveNoise;
 
         private bool _isDissolving;
+        private bool _deathVisualCompleted;
         private readonly List<Material> _dissolveMaterials = new();
+        private readonly List<Renderer> _dissolveRenderers = new();
 
         public bool IsDissolving => _isDissolving;
+        public bool HasCompletedDeathVisual => _deathVisualCompleted;
 
         public const string DeathAnimationName = "Die";
 
         /// <summary>
-        /// lilToon Dissolve로 사망 연출합니다.
+        /// Die 애니 + lilToon Dissolve. 한 캐릭터당 한 번만 실행됩니다.
         /// </summary>
-        public IEnumerator PlayDeathDissolve()
+        public IEnumerator PlayDeathDissolve(bool playDeathAnimation = true)
         {
-            if (_isDissolving)
+            if (_isDissolving || _deathVisualCompleted)
                 yield break;
 
             _isDissolving = true;
 
-            if (!TryPlayAnimation(DeathAnimationName))
-                TryPlayAnimation("Death");
+            if (playDeathAnimation)
+            {
+                if (!TryPlayAnimation(DeathAnimationName))
+                    TryPlayAnimation("Death");
+            }
 
             if (!CollectAndPrepareDissolveMaterials())
             {
-                Debug.LogWarning($"[Death] lilToon Dissolve 머티리얼 없음 → 애니만 대기 후 종료: {name}");
-                yield return WaitCurrentAnimationEnd(DeathAnimationName, 2.5f);
-                _isDissolving = false;
+                Debug.LogWarning($"[Death] lilToon Dissolve 머티리얼 없음 → Die만 대기: {name}");
+                if (playDeathAnimation)
+                    yield return WaitCurrentAnimationEnd(DeathAnimationName, 2.5f);
+                FinishDeathVisual();
                 yield break;
             }
 
@@ -63,8 +67,9 @@ namespace SHIN
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
+                // 커브 직렬화 깨짐으로 항상 0이 나오던 이슈가 있어 선형 보간 사용
                 float t = Mathf.Clamp01(elapsed / duration);
-                ApplyDissolveAmount(EvaluateDissolveCurve(t));
+                ApplyDissolveAmount(t);
                 yield return null;
             }
 
@@ -73,24 +78,36 @@ namespace SHIN
             for (int i = 0; i < _dissolveMaterials.Count; i++)
                 LilToonDissolveUtility.SetInvisible(_dissolveMaterials[i], true);
 
-            _isDissolving = false;
+            FinishDeathVisual();
         }
 
-        private float EvaluateDissolveCurve(float t)
+        private void FinishDeathVisual()
         {
-            if (_deathDissolveCurve == null || _deathDissolveCurve.length <= 0)
-                return t;
+            for (int i = 0; i < _dissolveRenderers.Count; i++)
+            {
+                if (_dissolveRenderers[i] != null)
+                    _dissolveRenderers[i].enabled = false;
+            }
 
-            float v = _deathDissolveCurve.Evaluate(t);
-            if (v <= 0.0001f && t > 0.05f)
-                return t;
+            var allRenderers = GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < allRenderers.Length; i++)
+            {
+                if (allRenderers[i] != null)
+                    allRenderers[i].enabled = false;
+            }
 
-            return Mathf.Clamp01(v);
+            var animator = Animator;
+            if (animator != null)
+                animator.enabled = false;
+
+            _deathVisualCompleted = true;
+            _isDissolving = false;
         }
 
         private bool CollectAndPrepareDissolveMaterials()
         {
-            CleanupDissolveMaterials(destroyInstances: true);
+            _dissolveMaterials.Clear();
+            _dissolveRenderers.Clear();
 
             var renderers = GetComponentsInChildren<Renderer>(true);
             for (int r = 0; r < renderers.Length; r++)
@@ -99,7 +116,6 @@ namespace SHIN
                 if (renderer == null || !renderer.enabled || renderer is ParticleSystemRenderer)
                     continue;
 
-                // materials → 인스턴스 (공유 에셋 오염 방지)
                 var mats = renderer.materials;
                 bool anyPrepared = false;
 
@@ -120,12 +136,14 @@ namespace SHIN
                     {
                         _dissolveMaterials.Add(mat);
                         anyPrepared = true;
-                        Debug.Log($"[Death] lilToon Dissolve 적용: {renderer.name} / {mat.shader.name}");
                     }
                 }
 
                 if (anyPrepared)
+                {
                     renderer.materials = mats;
+                    _dissolveRenderers.Add(renderer);
+                }
             }
 
             Debug.Log($"[Death] Dissolve 준비: {_dissolveMaterials.Count} materials / {name}");
@@ -156,6 +174,7 @@ namespace SHIN
             }
 
             _dissolveMaterials.Clear();
+            _dissolveRenderers.Clear();
         }
 
         private void OnDestroy()

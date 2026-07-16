@@ -246,7 +246,7 @@ namespace SHIN
             switch (session.Card.CardType)
             {
                 case CARD_TYPE.ATTACK:
-                    ApplyAttackHitDamage(session, session.TotalDamage);
+                    ApplyAttackHitDamage(session, session.TotalDamage, CameraShakeLevel.None, isLastHit: true);
                     break;
                 case CARD_TYPE.DEFENSE:
                     Debug.Log($"[Combat][DEFENSE] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} (구현 예정)");
@@ -272,6 +272,12 @@ namespace SHIN
         public void OnAnimCombatSetup(CharacterBase source, string ratiosCsv)
         {
             if (_resolveSession == null || source == null || source != _resolveSession.User)
+                return;
+
+            // 분할 State 후반에서 Setup이 다시 오면 Hit 인덱스가 리셋되므로 무시
+            if (_resolveSession.SetupReceived &&
+                _resolveSession.HitDamages != null &&
+                _resolveSession.HitDamages.Length > 0)
                 return;
 
             var weights = CombatDamageSplit.ParseWeightsCsv(ratiosCsv);
@@ -325,7 +331,7 @@ namespace SHIN
             if (session.Card.CardType != CARD_TYPE.ATTACK)
                 return;
 
-            if (session.Target == null || session.Target.IsDead)
+            if (session.Target == null)
                 return;
 
             // Setup이 없으면 단일 타격
@@ -346,19 +352,21 @@ namespace SHIN
 
             int portion = session.HitDamages[session.NextHitIndex];
             session.NextHitIndex++;
-            ApplyAttackHitDamage(session, portion, cameraShake);
+            bool isLastHit = session.NextHitIndex >= session.HitDamages.Length;
+            ApplyAttackHitDamage(session, portion, cameraShake, isLastHit);
         }
 
         private void ApplyAttackHitDamage(
             CardResolveSession session,
             int damage,
-            CameraShakeLevel cameraShake = CameraShakeLevel.None)
+            CameraShakeLevel cameraShake = CameraShakeLevel.None,
+            bool isLastHit = false)
         {
             if (session?.Target == null || damage < 0)
                 return;
 
-            if (session.Target.IsDead)
-                return;
+            // 판정 타이밍: Hit + 카메라 흔들기
+            session.Target.PlayHitAnimation();
 
             int applied = session.Target.TakeDamage(damage);
             Debug.Log(
@@ -367,6 +375,10 @@ namespace SHIN
 
             if (cameraShake != CameraShakeLevel.None)
                 GameManager.Instance?.CameraManager?.Shake(cameraShake);
+
+            // 마지막 공격 판정에서만 사망 처리 (Die/디졸브)
+            if (isLastHit && session.Target.IsDead)
+                ProcessDeath(session.Target);
         }
 
         private void FinishCardResolve(CardResolveSession session)
@@ -376,9 +388,7 @@ namespace SHIN
 
             ConsumePlayedCard(session.User, session.Card);
 
-            if (session.Target != null && session.Target.IsDead)
-                ProcessDeath(session.Target);
-
+            // 대상 사망은 마지막 Hit 판정에서 이미 처리됨
             if (session.User != null && session.User.IsDead)
                 ProcessDeath(session.User);
         }
@@ -506,6 +516,10 @@ namespace SHIN
             if (character == null)
                 return;
 
+            // 마지막 Hit에서 이미 처리 중/완료면 중복 호출 방지
+            if (character.IsDissolving || character.HasCompletedDeathVisual)
+                return;
+
             Debug.Log($"[Combat] 사망 처리: {GetCombatName(character)}");
 
             RemoveFromTurnSystem(character);
@@ -530,15 +544,17 @@ namespace SHIN
             if (character == null)
                 yield break;
 
-            // TakeDamage에서 이미 디졸브 시작했으면 끝날 때까지 대기
-            if (character.IsDissolving)
+            if (!character.HasCompletedDeathVisual && !character.IsDissolving)
+            {
+                // InGameManager에서 직접 열거형을 돌려도 되지만,
+                // 캐릭터 StartCoroutine으로 실행해 중간에 끊기지 않게 한다.
+                var deathRoutine = character.StartCoroutine(character.PlayDeathDissolve(playDeathAnimation: true));
+                yield return deathRoutine;
+            }
+            else if (character.IsDissolving)
             {
                 while (character != null && character.IsDissolving)
                     yield return null;
-            }
-            else
-            {
-                yield return character.PlayDeathDissolve();
             }
 
             if (character != null)
