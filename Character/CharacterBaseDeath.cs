@@ -180,6 +180,7 @@ namespace SHIN
         private void OnDestroy()
         {
             CleanupDissolveMaterials(destroyInstances: true);
+            CleanupEffectPools();
         }
     }
 }

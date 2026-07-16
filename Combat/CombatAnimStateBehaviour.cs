@@ -3,6 +3,12 @@ using UnityEngine;
 
 namespace SHIN
 {
+    public enum ParticleSpawnSpace
+    {
+        Child = 0,
+        World = 1,
+    }
+
     /// <summary>
     /// Animator 상태에 붙여 전투 판정을 보냅니다.
     /// 여러 State를 하나의 논리 애니로 묶을 때 AnimName을 같게 설정하세요. (예: Attack001)
@@ -22,6 +28,26 @@ namespace SHIN
             public CameraShakeLevel CameraShake = CameraShakeLevel.None;
         }
 
+        [Serializable]
+        public class ParticleCue
+        {
+            [Range(0f, 1f)]
+            [Tooltip("파티클을 생성할 상태 normalizedTime (0~1)")]
+            public float NormalizedTime = 0.5f;
+
+            [Tooltip("Addressables 파티클 프리팹 주소")]
+            public string ParticleAddress;
+
+            [Tooltip("Child: Animator 자식으로 생성 / World: 월드에 독립 생성")]
+            public ParticleSpawnSpace SpawnSpace = ParticleSpawnSpace.World;
+
+            [Tooltip("Animator 기준 위치 오프셋")]
+            public Vector3 PositionOffset;
+
+            [Tooltip("Animator 기준 회전 오프셋")]
+            public Vector3 RotationOffset;
+        }
+
         [Header("Logical Anim")]
         [Tooltip("카드 AnimationName과 동일한 논리 이름. 비우면 Animator State 이름을 사용합니다.")]
         [SerializeField]
@@ -37,12 +63,18 @@ namespace SHIN
         [SerializeField]
         private JudgmentCue[] _judgments = Array.Empty<JudgmentCue>();
 
+        [Header("Particle Timings")]
+        [Tooltip("normalizedTime 순으로 파티클 프리팹을 생성합니다.")]
+        [SerializeField]
+        private ParticleCue[] _particleCues = Array.Empty<ParticleCue>();
+
         public string AnimName => _animName;
 
         private CharacterBase _character;
         private string _resolvedAnimName;
         private bool _setupSent;
         private int _nextCueIndex;
+        private int _nextParticleCueIndex;
         private float _lastNormalizedTime;
 
         public override void OnStateEnter(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
@@ -50,10 +82,12 @@ namespace SHIN
             _character = ResolveCharacter(animator);
             _setupSent = false;
             _nextCueIndex = 0;
+            _nextParticleCueIndex = 0;
             _lastNormalizedTime = 0f;
             _resolvedAnimName = ResolveAnimName(stateInfo);
 
             SortJudgmentsByTime();
+            SortParticleCuesByTime();
 
             if (_character != null && !string.IsNullOrEmpty(_resolvedAnimName))
                 _character.NotifyCombatAnimEnter(_resolvedAnimName);
@@ -66,7 +100,9 @@ namespace SHIN
             if (_character == null)
                 _character = ResolveCharacter(animator);
 
-            if (_judgments == null || _judgments.Length == 0)
+            bool hasJudgments = _judgments != null && _judgments.Length > 0;
+            bool hasParticleCues = _particleCues != null && _particleCues.Length > 0;
+            if (!hasJudgments && !hasParticleCues)
                 return;
 
             float t = stateInfo.normalizedTime;
@@ -74,6 +110,7 @@ namespace SHIN
             if (stateInfo.loop && Mathf.FloorToInt(t) > Mathf.FloorToInt(_lastNormalizedTime))
             {
                 _nextCueIndex = 0;
+                _nextParticleCueIndex = 0;
                 _setupSent = false;
                 SendSetup();
             }
@@ -89,6 +126,22 @@ namespace SHIN
 
                 FireJudgment(cue.Type, cue.CameraShake);
                 _nextCueIndex++;
+            }
+
+            while (_nextParticleCueIndex < _particleCues.Length)
+            {
+                var cue = _particleCues[_nextParticleCueIndex];
+                if (cue == null)
+                {
+                    _nextParticleCueIndex++;
+                    continue;
+                }
+
+                if (cycleTime + 1e-4f < cue.NormalizedTime)
+                    break;
+
+                SpawnParticle(animator, cue);
+                _nextParticleCueIndex++;
             }
         }
 
@@ -132,6 +185,28 @@ namespace SHIN
             GameManager.Instance?.InGameManager?.OnAnimCombatJudgment(_character, type, 1f, cameraShake);
         }
 
+        private void SpawnParticle(Animator animator, ParticleCue cue)
+        {
+            if (animator == null || cue == null || string.IsNullOrWhiteSpace(cue.ParticleAddress))
+                return;
+
+            if (_character == null)
+                _character = ResolveCharacter(animator);
+
+            if (_character == null)
+            {
+                Debug.LogWarning($"[CombatAnim] 파티클 스폰용 CharacterBase 없음: {cue.ParticleAddress}");
+                return;
+            }
+
+            _character.SpawnParticleEffect(
+                cue.ParticleAddress,
+                cue.SpawnSpace,
+                cue.PositionOffset,
+                cue.RotationOffset,
+                animator.transform);
+        }
+
         private static CharacterBase ResolveCharacter(Animator animator)
         {
             if (animator == null)
@@ -149,6 +224,23 @@ namespace SHIN
                 return;
 
             Array.Sort(_judgments, (a, b) => a.NormalizedTime.CompareTo(b.NormalizedTime));
+        }
+
+        private void SortParticleCuesByTime()
+        {
+            if (_particleCues == null || _particleCues.Length <= 1)
+                return;
+
+            Array.Sort(
+                _particleCues,
+                (a, b) =>
+                {
+                    if (a == null)
+                        return b == null ? 0 : 1;
+                    if (b == null)
+                        return -1;
+                    return a.NormalizedTime.CompareTo(b.NormalizedTime);
+                });
         }
     }
 }
