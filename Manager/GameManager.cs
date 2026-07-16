@@ -7,6 +7,7 @@ namespace SHIN
     {
         [SerializeField] private ResourceManager _resourceManager;
         [SerializeField] private CameraManager _cameraManager;
+        [SerializeField] private TimeManager _timeManager;
 
         private GameObject _currentStageObject;
         private InGameManager _inGameManager;
@@ -26,6 +27,15 @@ namespace SHIN
             {
                 ManagerBase.EnsureManager(transform, ref _cameraManager);
                 return _cameraManager;
+            }
+        }
+
+        public TimeManager TimeManager
+        {
+            get
+            {
+                ManagerBase.EnsureManager(transform, ref _timeManager);
+                return _timeManager;
             }
         }
 

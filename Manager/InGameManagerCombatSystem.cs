@@ -374,7 +374,11 @@ namespace SHIN
                 $"히트데미지:{applied} / 남은HP:{session.Target.UnitInfo.CurrentHp}");
 
             if (cameraShake != CameraShakeLevel.None)
+            {
                 GameManager.Instance?.CameraManager?.Shake(cameraShake);
+                // 쉐이크와 같은 타이밍에 캐릭터 애니/이펙트 히트스톱
+                GameManager.Instance?.TimeManager?.HitStop();
+            }
 
             // 마지막 공격 판정에서만 사망 처리 (Die/디졸브)
             if (isLastHit && session.Target.IsDead)

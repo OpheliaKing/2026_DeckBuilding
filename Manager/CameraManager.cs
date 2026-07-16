@@ -34,7 +34,7 @@ namespace SHIN
         [SerializeField]
         private CameraShakePreset[] _shakePresets =
         {
-            new CameraShakePreset { Force = 0.35f, Duration = 0.12f },
+            new CameraShakePreset { Force = 0.12f, Duration = 0.12f },
             new CameraShakePreset { Force = 0.75f, Duration = 0.18f },
             new CameraShakePreset { Force = 1.25f, Duration = 0.28f },
         };

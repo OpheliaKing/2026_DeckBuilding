@@ -27,6 +27,24 @@ namespace SHIN
         /// </summary>
         private readonly Dictionary<string, int> _combatAnimRefCounts = new();
 
+        private void LateUpdate()
+        {
+            ApplyCharacterTimeScale();
+        }
+
+        /// <summary>TimeManager의 캐릭터 시간 배율을 Animator에 반영합니다.</summary>
+        private void ApplyCharacterTimeScale()
+        {
+            var animator = Animator;
+            if (animator == null)
+                return;
+
+            var timeManager = GameManager.Instance?.TimeManager;
+            float scale = timeManager != null ? timeManager.EffectiveCharacterTimeScale : 1f;
+            if (!Mathf.Approximately(animator.speed, scale))
+                animator.speed = scale;
+        }
+
         /// <summary>
         /// 카드 애니메이션 재생. 없으면 false.
         /// 데미지/버프 판정은 Animator 상태의 CombatAnimStateBehaviour에서 처리합니다.
