@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Cinemachine;
 using UnityEngine;
 
 namespace SHIN
@@ -18,6 +19,22 @@ namespace SHIN
 
         public IReadOnlyList<Transform> CharacterPositions => _characterPositions;
         public float PositionSpacing => _positionSpacing;
+
+/// <summary>
+/// 해당 팀을 바라보는 카메라
+/// </summary>
+        private CinemachineVirtualCamera _teamTargrtCamera;
+        public CinemachineVirtualCamera TeamTargrtCamera
+        {
+            get
+            {
+                if(_teamTargrtCamera == null)
+                {
+                    _teamTargrtCamera = GetComponentInChildren<CinemachineVirtualCamera>(true);
+                }
+                return _teamTargrtCamera;
+            }
+        }
 
         /// <summary>
         /// 인원수에 맞게 슬롯 X를 중앙 정렬하고, 사용할 Transform들을 반환합니다.

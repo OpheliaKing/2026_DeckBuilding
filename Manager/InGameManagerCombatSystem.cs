@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -26,6 +27,7 @@ namespace SHIN
             public int[] HitDamages;
             public int NextHitIndex;
             public bool SetupReceived;
+            public List<CharacterBase> BuffTargets;
         }
 
         private void Update()
@@ -95,7 +97,20 @@ namespace SHIN
         private void BeginTargetSelection(CardData card)
         {
             _isWaitingForTarget = true;
+
+            if (card != null && card.CardType == CARD_TYPE.BUFF)
+                SetBuffTargetCameraActive(true);
+
             Debug.Log($"[Combat] 대상 선택 대기 중... (타입: {card?.CardType}) / 우클릭·Esc 취소");
+        }
+
+        private void SetBuffTargetCameraActive(bool active)
+        {
+            var teamCamera = _playerGroupPosition?.TeamTargrtCamera;
+            if (teamCamera == null)
+                return;
+
+            teamCamera.gameObject.SetActive(active);
         }
 
         private CharacterBase RaycastCharacterFromCamera()
@@ -153,6 +168,12 @@ namespace SHIN
 
             if (!IsValidTarget(CurrentActor, target, _selectedCard))
             {
+                if (_selectedCard.CardType == CARD_TYPE.BUFF)
+                {
+                    // TODO: 잘못된 대상 UI 표시
+                    return;
+                }
+
                 Debug.LogWarning(
                     $"[Combat] 이 카드({_selectedCard.CardType})의 대상이 올바르지 않습니다: {GetCombatName(target)}");
                 return;
@@ -160,7 +181,8 @@ namespace SHIN
 
             var user = CurrentActor;
             var card = _selectedCard;
-            ClearCardSelection();
+            bool keepBuffCamera = card.CardType == CARD_TYPE.BUFF;
+            ClearCardSelection(keepBuffCamera);
 
             UseCard(user, target, card);
         }
@@ -197,6 +219,7 @@ namespace SHIN
             {
                 ApplyImmediateCardEffect(_resolveSession);
                 FinishCardResolve(_resolveSession);
+                DeactivateBuffTargetCameraIfNeeded(card);
                 _resolveSession = null;
                 _isResolvingCard = false;
                 yield break;
@@ -216,8 +239,15 @@ namespace SHIN
             }
 
             FinishCardResolve(_resolveSession);
+            DeactivateBuffTargetCameraIfNeeded(card);
             _resolveSession = null;
             _isResolvingCard = false;
+        }
+
+        private void DeactivateBuffTargetCameraIfNeeded(CardData card)
+        {
+            if (card != null && card.CardType == CARD_TYPE.BUFF)
+                SetBuffTargetCameraActive(false);
         }
 
         private CardResolveSession CreateResolveSession(CharacterBase user, CharacterBase target, CardData card)
@@ -234,8 +264,40 @@ namespace SHIN
                 int damage = CalculateDamage(user, target, card);
                 session.TotalDamage = ApplyAttackExtraEffects(user, target, card, damage);
             }
+            else if (card.CardType == CARD_TYPE.BUFF)
+            {
+                session.BuffTargets = BuildBuffTargets(user, target, card);
+            }
 
             return session;
+        }
+
+        private List<CharacterBase> BuildBuffTargets(CharacterBase user, CharacterBase clickedTarget, CardData card)
+        {
+            var targets = new List<CharacterBase>();
+
+            if (card == null)
+                return targets;
+
+            switch (card.BuffTargetType)
+            {
+                case CARD_BUFF_TARGET_TYPE.SELF:
+                case CARD_BUFF_TARGET_TYPE.TEAM:
+                    if (clickedTarget != null && clickedTarget.IsAlive)
+                        targets.Add(clickedTarget);
+                    break;
+
+                case CARD_BUFF_TARGET_TYPE.ALL:
+                    for (int i = 0; i < _playerCharacters.Count; i++)
+                    {
+                        var ally = _playerCharacters[i];
+                        if (ally != null && ally.IsAlive)
+                            targets.Add(ally);
+                    }
+                    break;
+            }
+
+            return targets;
         }
 
         private void ApplyImmediateCardEffect(CardResolveSession session)
@@ -252,7 +314,7 @@ namespace SHIN
                     Debug.Log($"[Combat][DEFENSE] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} (구현 예정)");
                     break;
                 case CARD_TYPE.BUFF:
-                    Debug.Log($"[Combat][BUFF] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} (구현 예정)");
+                    ApplyBuffEffect(session);
                     break;
                 case CARD_TYPE.DEBUFF:
                     Debug.Log($"[Combat][DEBUFF] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} (구현 예정)");
@@ -312,7 +374,7 @@ namespace SHIN
                     HandleAnimHit(session, cameraShake);
                     break;
                 case CombatJudgmentType.Buff:
-                    Debug.Log($"[Combat][Anim][BUFF] {card.Name} (구현 예정)");
+                    HandleAnimBuff(session);
                     break;
                 case CombatJudgmentType.Debuff:
                     Debug.Log($"[Combat][Anim][DEBUFF] {card.Name} (구현 예정)");
@@ -385,6 +447,42 @@ namespace SHIN
                 ProcessDeath(session.Target);
         }
 
+        private void HandleAnimBuff(CardResolveSession session)
+        {
+            if (session?.Card == null || session.Card.CardType != CARD_TYPE.BUFF)
+                return;
+
+            ApplyBuffEffect(session);
+        }
+
+        private void ApplyBuffEffect(CardResolveSession session)
+        {
+            if (session?.Card == null || session.Card.CardType != CARD_TYPE.BUFF)
+                return;
+
+            var buffData = session.Card.BuffData;
+            if (buffData == null || buffData.BuffEffectType == CARD_BUFF_EFFECT_TYPE.NONE)
+            {
+                Debug.LogWarning($"[Combat][BUFF] 버프 데이터 없음: {session.Card.Name}");
+                return;
+            }
+
+            if (session.BuffTargets == null || session.BuffTargets.Count == 0)
+            {
+                Debug.LogWarning($"[Combat][BUFF] 적용 대상 없음: {session.Card.Name}");
+                return;
+            }
+
+            for (int i = 0; i < session.BuffTargets.Count; i++)
+            {
+                var target = session.BuffTargets[i];
+                if (target == null || target.IsDead)
+                    continue;
+
+                target.ApplyBuffFromCard(session.Card);
+            }
+        }
+
         private void FinishCardResolve(CardResolveSession session)
         {
             if (session == null)
@@ -411,12 +509,34 @@ namespace SHIN
                     return !targetIsPlayer;
 
                 case CARD_TYPE.DEFENSE:
-                case CARD_TYPE.BUFF:
                     return targetIsPlayer;
+
+                case CARD_TYPE.BUFF:
+                    return IsValidBuffTarget(user, target, card);
 
                 case CARD_TYPE.SPECIAL:
                     return true;
 
+                default:
+                    return false;
+            }
+        }
+
+        private bool IsValidBuffTarget(CharacterBase user, CharacterBase target, CardData card)
+        {
+            if (user == null || target == null || card == null || target.IsDead)
+                return false;
+
+            if (!IsPlayerCharacter(target))
+                return false;
+
+            switch (card.BuffTargetType)
+            {
+                case CARD_BUFF_TARGET_TYPE.SELF:
+                    return target == user;
+                case CARD_BUFF_TARGET_TYPE.TEAM:
+                case CARD_BUFF_TARGET_TYPE.ALL:
+                    return true;
                 default:
                     return false;
             }
@@ -427,8 +547,11 @@ namespace SHIN
             ClearCardSelection();
         }
 
-        private void ClearCardSelection()
+        private void ClearCardSelection(bool keepBuffCamera = false)
         {
+            if (!keepBuffCamera)
+                SetBuffTargetCameraActive(false);
+
             _selectedCardObject = null;
             _selectedCard = null;
             _isWaitingForTarget = false;

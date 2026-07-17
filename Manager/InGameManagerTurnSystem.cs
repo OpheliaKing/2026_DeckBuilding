@@ -203,6 +203,7 @@ namespace SHIN
 
         private void ActiveTurnStartEffect(CharacterBase character)
         {
+            character?.TickBuffsOnTurnStart();
         }
 
         private void ActiveTurnEndEffect(CharacterBase character)

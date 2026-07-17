@@ -50,7 +50,7 @@ namespace SHIN
             {
                 if (PlayerCharacters.Count > 0)
                 {
-                    var cardTids = new List<string> { "card_001", "card_001", "card_001" };
+                    var cardTids = new List<string> { "card_001", "card_001", "card_buff_001" };
                     AddCard(PlayerCharacters[0], cardTids, (unitInfo) =>
                     {
                         Debug.Log($"[GameManager] 카드 추가 완료: {unitInfo.DeckCardList.Count}");

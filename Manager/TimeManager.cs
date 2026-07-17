@@ -17,7 +17,7 @@ namespace SHIN
 
         [SerializeField]
         [Tooltip("히트스톱 기본 시간(초). 비스케일 시간 기준.")]
-        private float _defaultHitStopDuration = 0.05f;
+        private float _defaultHitStopDuration = 0.1f;
 
         [Header("Pause Time")]
         [SerializeField]

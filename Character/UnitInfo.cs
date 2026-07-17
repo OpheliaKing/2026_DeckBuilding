@@ -52,6 +52,52 @@ namespace SHIN
 
         #endregion
 
+        #region Buff
+
+        private readonly List<ActiveBuff> _activeBuffs = new();
+        public IReadOnlyList<ActiveBuff> ActiveBuffs => _activeBuffs;
+
+        public void AddBuff(CARD_BUFF_EFFECT_TYPE effectType, float value, int duration, string sourceCardTid = null)
+        {
+            if (effectType == CARD_BUFF_EFFECT_TYPE.NONE || duration <= 0)
+                return;
+
+            _activeBuffs.Add(new ActiveBuff
+            {
+                EffectType = effectType,
+                Value = value,
+                RemainingTurns = duration,
+                SourceCardTid = sourceCardTid,
+            });
+        }
+
+        /// <summary>
+        /// 턴 시작 시 남은 지속시간을 1 감소하고 0이면 제거합니다.
+        /// </summary>
+        public void TickBuffsOnTurnStart()
+        {
+            for (int i = _activeBuffs.Count - 1; i >= 0; i--)
+            {
+                _activeBuffs[i].RemainingTurns--;
+                if (_activeBuffs[i].RemainingTurns <= 0)
+                    _activeBuffs.RemoveAt(i);
+            }
+        }
+
+        private float GetBuffValueSum(CARD_BUFF_EFFECT_TYPE effectType)
+        {
+            float sum = 0f;
+            for (int i = 0; i < _activeBuffs.Count; i++)
+            {
+                if (_activeBuffs[i].EffectType == effectType)
+                    sum += _activeBuffs[i].Value;
+            }
+
+            return sum;
+        }
+
+        #endregion
+
         public void InitUnitInfo(UnitData unitData)
         {
             _unitData = unitData;
@@ -90,7 +136,9 @@ namespace SHIN
                 return 0;
             }
             ///아이템 계산 후 최대 체력 반환하도록 수정
-            return _unitData.unitBaseHp;
+            int baseHp = _unitData.unitBaseHp;
+            int hpBonus = Mathf.FloorToInt(GetBuffValueSum(CARD_BUFF_EFFECT_TYPE.HP_UP));
+            return Mathf.Max(1, baseHp + hpBonus);
         }
 
         private int CalculateCurrentAttack()
@@ -101,7 +149,9 @@ namespace SHIN
                 return 0;
             }
             ///아이템 계산 후 데미지 반환하도록 수정
-            return _unitData.unitBaseAttack;
+            int baseAttack = _unitData.unitBaseAttack;
+            int attackBonus = Mathf.FloorToInt(GetBuffValueSum(CARD_BUFF_EFFECT_TYPE.ATTACK_UP));
+            return Mathf.Max(0, baseAttack + attackBonus);
         }
 
         private int CalculateCurrentDefense()
@@ -112,7 +162,9 @@ namespace SHIN
                 return 0;
             }
             ///아이템 계산 후 방어력 반환하도록 수정
-            return _unitData.unitBaseDefense;
+            int baseDefense = _unitData.unitBaseDefense;
+            int defenseBonus = Mathf.FloorToInt(GetBuffValueSum(CARD_BUFF_EFFECT_TYPE.DEFENSE_UP));
+            return Mathf.Max(0, baseDefense + defenseBonus);
         }
 
         private int CalculateCurrentSpeed()
@@ -123,7 +175,9 @@ namespace SHIN
                 return 0;
             }
             ///아이템 계산 후 속도 반환하도록 수정
-            return _unitData.unitBaseSpeed;
+            int baseSpeed = _unitData.unitBaseSpeed;
+            int speedBonus = Mathf.FloorToInt(GetBuffValueSum(CARD_BUFF_EFFECT_TYPE.SPEED_UP));
+            return Mathf.Max(1, baseSpeed + speedBonus);
         }
 
         public void AddDeckCard(CardData cardData)
