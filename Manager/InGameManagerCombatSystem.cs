@@ -98,8 +98,9 @@ namespace SHIN
         {
             _isWaitingForTarget = true;
 
-            if (card != null && card.CardType == CARD_TYPE.BUFF)
-                SetBuffTargetCameraActive(true);
+            // 버프만 팀 카메라 사용. 다른 카드로 전환 시 반드시 끔.
+            bool useBuffCamera = card != null && card.CardType == CARD_TYPE.BUFF;
+            SetBuffTargetCameraActive(useBuffCamera);
 
             Debug.Log($"[Combat] 대상 선택 대기 중... (타입: {card?.CardType}) / 우클릭·Esc 취소");
         }
