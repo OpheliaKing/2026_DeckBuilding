@@ -39,7 +39,38 @@ namespace SHIN
 
             yield return new WaitUntil(() => playerSettingTask.IsCompleted && enemySettingTask.IsCompleted);
 
+            var characterInitializeTask = InitializeCharactersAsync();
+            yield return new WaitUntil(() => characterInitializeTask.IsCompleted);
+
+            if (characterInitializeTask.IsFaulted)
+            {
+                Debug.LogException(characterInitializeTask.Exception);
+                yield break;
+            }
+
             InGameBattleStart();
+        }
+
+        /// <summary>
+        /// 생성된 플레이어 캐릭터의 장비에 맞춰 Animator와 무기 모델을 초기화합니다.
+        /// </summary>
+        private async Task InitializeCharactersAsync()
+        {
+            var resourceManager = GameManager.Instance?.ResourceManager;
+            if (resourceManager == null)
+            {
+                Debug.LogError("[InGameManager] 캐릭터 장비 초기화에 필요한 ResourceManager가 없습니다.");
+                return;
+            }
+
+            for (int i = 0; i < _playerCharacters.Count; i++)
+            {
+                var character = _playerCharacters[i];
+                if (character == null)
+                    continue;
+
+                await character.InitializeEquipmentAsync(resourceManager);
+            }
         }
 
         private void CacheGroupPositions()

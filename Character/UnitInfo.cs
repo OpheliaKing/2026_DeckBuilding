@@ -29,6 +29,18 @@ namespace SHIN
 
         private List<string> _itemList = new List<string>();
 
+        #region Equip
+
+        private CHARACTER_EQUIP_TYPE _equipType = CHARACTER_EQUIP_TYPE.NONE;
+        public CHARACTER_EQUIP_TYPE EquipType => _equipType;
+
+        public void SetEquipType(CHARACTER_EQUIP_TYPE equipType)
+        {
+            _equipType = equipType;
+        }
+
+        #endregion
+
         #region Card
 
         /// <summary>마스터 덱 (영구 보유 카드)</summary>

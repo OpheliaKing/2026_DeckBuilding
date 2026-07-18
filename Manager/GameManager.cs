@@ -48,6 +48,7 @@ namespace SHIN
             //아래 코드는 테스트용
             AddPlayerCharacter("player_0001", (unitInfo) =>
             {
+                unitInfo.SetEquipType(CHARACTER_EQUIP_TYPE.BOW);
                 if (PlayerCharacters.Count > 0)
                 {
                     var cardTids = new List<string> { "card_001", "card_001", "card_buff_001" };
