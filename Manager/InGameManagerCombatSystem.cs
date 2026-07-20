@@ -443,9 +443,52 @@ namespace SHIN
                 GameManager.Instance?.TimeManager?.HitStop();
             }
 
+            if (applied > 0)
+            {
+                FireItemEffects(ITEM_EFFECT_TIMING.ON_ATTACK, new ItemEffectContext
+                {
+                    Owner = session.User,
+                    Source = session.User,
+                    Target = session.Target,
+                    Card = session.Card,
+                    Damage = applied,
+                });
+
+                FireItemEffects(ITEM_EFFECT_TIMING.ON_DAMAGE, new ItemEffectContext
+                {
+                    Owner = session.Target,
+                    Source = session.User,
+                    Target = session.Target,
+                    Card = session.Card,
+                    Damage = applied,
+                });
+
+                FireHealthThresholdItemEffects(session.Target);
+            }
+
             // 마지막 공격 판정에서만 사망 처리 (Die/디졸브)
             if (isLastHit && session.Target.IsDead)
+            {
+                FireItemEffects(ITEM_EFFECT_TIMING.ON_KILL, new ItemEffectContext
+                {
+                    Owner = session.User,
+                    Source = session.User,
+                    Target = session.Target,
+                    Card = session.Card,
+                    Damage = applied,
+                });
+
+                FireItemEffects(ITEM_EFFECT_TIMING.ON_DEATH, new ItemEffectContext
+                {
+                    Owner = session.Target,
+                    Source = session.User,
+                    Target = session.Target,
+                    Card = session.Card,
+                    Damage = applied,
+                });
+
                 ProcessDeath(session.Target);
+            }
         }
 
         private void HandleAnimBuff(CardResolveSession session)
@@ -490,6 +533,17 @@ namespace SHIN
                 return;
 
             ConsumePlayedCard(session.User, session.Card);
+
+            if (session.User != null)
+            {
+                FireItemEffects(ITEM_EFFECT_TIMING.ON_USE_CARD, new ItemEffectContext
+                {
+                    Owner = session.User,
+                    Source = session.User,
+                    Target = session.Target,
+                    Card = session.Card,
+                });
+            }
 
             // 대상 사망은 마지막 Hit 판정에서 이미 처리됨
             if (session.User != null && session.User.IsDead)
@@ -712,9 +766,15 @@ namespace SHIN
             }
 
             if (!anyEnemyAlive)
+            {
                 Debug.Log("[Combat] 전투 승리");
+                FireItemEffects(ITEM_EFFECT_TIMING.BATTLE_END);
+            }
             else if (!anyPlayerAlive)
+            {
                 Debug.Log("[Combat] 전투 패배");
+                FireItemEffects(ITEM_EFFECT_TIMING.BATTLE_END);
+            }
         }
 
         private static string GetCombatName(CharacterBase character)

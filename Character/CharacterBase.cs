@@ -35,6 +35,17 @@ namespace SHIN
         }
 
         /// <summary>
+        /// 회복을 적용하고 실제 회복량을 반환합니다. 최대 체력을 넘지 않습니다.
+        /// </summary>
+        public int Heal(int amount)
+        {
+            if (_unitInfo == null || IsDead)
+                return 0;
+
+            return _unitInfo.ApplyHeal(Mathf.Max(0, amount));
+        }
+
+        /// <summary>
         /// PhysicsRaycaster 등 다른 경로에서 직접 호출할 때 사용합니다.
         /// 기본 대상 선택은 InGameManager 카메라 레이캐스트로 처리됩니다.
         /// </summary>

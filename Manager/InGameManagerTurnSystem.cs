@@ -21,8 +21,12 @@ namespace SHIN
         /// <summary>
         /// 전투 시작 시 효과 발동 타이밍
         /// </summary>
-        private void BattleStartTiming()
+        private async System.Threading.Tasks.Task BattleStartTimingAsync()
         {
+            await RegisterAllItemEffectsAsync();
+
+            // Owner 지정 없이 전체 BATTLE_START 효과 발동
+            FireItemEffects(ITEM_EFFECT_TIMING.BATTLE_START);
         }
 
         /// <summary>
@@ -204,10 +208,28 @@ namespace SHIN
         private void ActiveTurnStartEffect(CharacterBase character)
         {
             character?.TickBuffsOnTurnStart();
+
+            if (character != null)
+            {
+                FireItemEffects(ITEM_EFFECT_TIMING.TURN_START, new ItemEffectContext
+                {
+                    Owner = character,
+                    Source = character,
+                });
+            }
         }
 
         private void ActiveTurnEndEffect(CharacterBase character)
         {
+            if (character != null)
+            {
+                FireItemEffects(ITEM_EFFECT_TIMING.TURN_END, new ItemEffectContext
+                {
+                    Owner = character,
+                    Source = character,
+                });
+            }
+
             // 턴 종료 시 손패를 버린 패로 이동
             character?.UnitInfo?.DiscardAllHand();
             ClearCardSelection();

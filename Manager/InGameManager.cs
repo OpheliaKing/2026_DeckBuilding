@@ -264,7 +264,7 @@ namespace SHIN
             await EnsurePlayerUIAsync();
             InitCombatDecks();
             InitTurnSystem();
-            BattleStartTiming();
+            await BattleStartTimingAsync();
             StartNextTurn();
         }
 

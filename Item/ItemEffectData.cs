@@ -1,9 +1,10 @@
-using System.Collections;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace SHIN
 {
+    [Serializable]
     public class ItemEffectData
     {
         [SerializeField]
@@ -21,13 +22,18 @@ namespace SHIN
         [SerializeField]
         private string _effectCustomString;
         public string EffectCustomString => _effectCustomString;
+
+        /// <summary>InGameCombatEventSO에서 조회할 이벤트 tid 목록</summary>
+        [SerializeField]
+        private List<string> _inGameCombatEvents = new();
+        public IReadOnlyList<string> InGameCombatEvents => _inGameCombatEvents;
+
         /// <summary>
         /// 인스펙터 창에서 해당 효과를 설명하기 위해 사용하는 변수
         /// </summary>
         [SerializeField]
         private string _effectDataDescription;
     }
-
     public enum ITEM_EFFECT_TIMING
     {
         NONE,
@@ -48,7 +54,7 @@ namespace SHIN
     {
         NONE,//발동조건 없음(EFFECT_TIMING 조건에 따라 바로 발동)
         COUNT,//횟수 EX) On_HIT과 같이 사용하면 3번 맞음, ON_USE_CARD와 같이 사용시 카드 3장마다 발동
-        PERCENTAGE,//퍼센트 EX) HEALTH_LOW와 같이 사용하면 체력이 20% 이하일 때 발동
+        PERCENTAGE,//퍼센트 EX) HEALTH_LOW와 같이 사용하면 체력이 20% 이하일 때 발동, ON_ATTACK과 사용시 공격시 20% 확률로 발동
         ABSOLUTE,//절대값 EX) HEALTH_LOW와 같이 사용하면 체력이 20 이하일 때 발동
     }
 

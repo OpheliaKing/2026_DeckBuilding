@@ -57,6 +57,8 @@ namespace SHIN
                         Debug.Log($"[GameManager] 카드 추가 완료: {unitInfo.DeckCardList.Count}");
                     }); ;
                 }
+
+                unitInfo.AddItem("test_0001");
             });
 
             InGameStart("stage_0001");

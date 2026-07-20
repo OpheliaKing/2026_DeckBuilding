@@ -27,7 +27,168 @@ namespace SHIN
 
         public int CurrentSpeed => CalculateCurrentSpeed();
 
-        private List<string> _itemList = new List<string>();
+        #region Item
+
+        private readonly List<ItemData> _items = new();
+        public IReadOnlyList<ItemData> Items => _items;
+
+        private readonly List<ActiveItemEffectState> _activeItemEffects = new();
+        public IReadOnlyList<ActiveItemEffectState> ActiveItemEffects => _activeItemEffects;
+
+        private ItemDataSO _itemDataSO;
+        private ItemEffectDataSO _itemEffectDataSO;
+
+        public void SetItemDataSO(ItemDataSO itemDataSO)
+        {
+            _itemDataSO = itemDataSO;
+        }
+
+        public void SetItemEffectDataSO(ItemEffectDataSO itemEffectDataSO)
+        {
+            _itemEffectDataSO = itemEffectDataSO;
+        }
+
+        public void AddItem(ItemData itemData)
+        {
+            if (itemData == null)
+            {
+                Debug.LogError("[UnitInfo] ItemData is null");
+                return;
+            }
+
+            _items.Add(itemData);
+            RebuildActiveItemEffects();
+        }
+
+        /// <summary>
+        /// ItemDataSO에서 tid로 ItemData를 조회해 추가합니다.
+        /// 로컬/캐시에 SO가 없으면 ResourceManager로 로드한 뒤 추가합니다.
+        /// </summary>
+        /// <returns>즉시 추가되었거나 비동기 로드 요청이 시작되면 true</returns>
+        public bool AddItem(string itemTid)
+        {
+            if (string.IsNullOrEmpty(itemTid))
+            {
+                Debug.LogError("[UnitInfo] itemTid가 비어 있습니다.");
+                return false;
+            }
+
+            if (TryResolveItemDataSO())
+                return TryAddItemByTid(itemTid);
+
+            var gameManager = GameManager.Instance;
+            if (gameManager == null)
+            {
+                Debug.LogError("[UnitInfo] GameManager가 없어 ItemDataSO를 로드할 수 없습니다.");
+                return false;
+            }
+
+            gameManager.GetSOAsync<ItemDataSO>(PublicVariable.Address.ItemDataSO, itemDataSO =>
+            {
+                if (itemDataSO == null)
+                {
+                    Debug.LogError("[UnitInfo] ItemDataSO 로드 실패");
+                    return;
+                }
+
+                _itemDataSO = itemDataSO;
+                TryAddItemByTid(itemTid);
+            });
+
+            return true;
+        }
+
+        private bool TryResolveItemDataSO()
+        {
+            if (_itemDataSO != null)
+                return true;
+
+            var gameManager = GameManager.Instance;
+            if (gameManager != null &&
+                gameManager.TryGetSO(PublicVariable.Address.ItemDataSO, out ItemDataSO cached))
+            {
+                _itemDataSO = cached;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool TryAddItemByTid(string itemTid)
+        {
+            if (_itemDataSO == null)
+            {
+                Debug.LogError("[UnitInfo] ItemDataSO가 없습니다.");
+                return false;
+            }
+
+            if (!_itemDataSO.TryGetItemData(itemTid, out var itemData) || itemData == null)
+            {
+                Debug.LogError($"[UnitInfo] ItemData를 찾을 수 없습니다: {itemTid}");
+                return false;
+            }
+
+            AddItem(itemData);
+            return true;
+        }
+
+        public bool RemoveItem(ItemData itemData)
+        {
+            if (itemData == null || !_items.Remove(itemData))
+                return false;
+
+            RebuildActiveItemEffects();
+            return true;
+        }
+
+        public void ClearItems()
+        {
+            _items.Clear();
+            _activeItemEffects.Clear();
+        }
+
+        /// <summary>
+        /// 보유 아이템의 effect tid를 ItemEffectDataSO에서 조회해 런타임 효과 상태를 재구성합니다.
+        /// </summary>
+        public void RebuildActiveItemEffects()
+        {
+            _activeItemEffects.Clear();
+
+            if (_itemEffectDataSO == null)
+            {
+                if (_items.Count > 0)
+                    Debug.LogWarning("[UnitInfo] ItemEffectDataSO가 없어 아이템 효과를 구성할 수 없습니다.");
+                return;
+            }
+
+            for (int i = 0; i < _items.Count; i++)
+            {
+                var item = _items[i];
+                if (item?.ItemEffectDatas == null)
+                    continue;
+
+                for (int j = 0; j < item.ItemEffectDatas.Count; j++)
+                {
+                    var effectTid = item.ItemEffectDatas[j];
+                    if (string.IsNullOrEmpty(effectTid))
+                        continue;
+
+                    if (!_itemEffectDataSO.TryGetItemEffectData(effectTid, out var effect) || effect == null)
+                    {
+                        Debug.LogError(
+                            $"[UnitInfo] ItemEffectData를 찾을 수 없습니다: item={item.Tid} / effect={effectTid}");
+                        continue;
+                    }
+
+                    if (effect.EffectTiming == ITEM_EFFECT_TIMING.NONE)
+                        continue;
+
+                    _activeItemEffects.Add(new ActiveItemEffectState(item, effect));
+                }
+            }
+        }
+
+        #endregion
 
         #region Equip
 
@@ -138,6 +299,20 @@ namespace SHIN
             int before = _currentHp;
             _currentHp = Mathf.Max(0, _currentHp - damage);
             return before - _currentHp;
+        }
+
+        /// <summary>
+        /// 회복을 적용하고 실제 회복량을 반환합니다. 최대 체력을 넘지 않습니다.
+        /// </summary>
+        public int ApplyHeal(int amount)
+        {
+            if (amount <= 0 || IsDead)
+                return 0;
+
+            int before = _currentHp;
+            int maxHp = MaxHp;
+            _currentHp = Mathf.Min(maxHp, _currentHp + amount);
+            return _currentHp - before;
         }
 
         private int CalculateMaxHp()
