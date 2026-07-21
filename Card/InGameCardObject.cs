@@ -11,6 +11,8 @@ namespace SHIN
         private TextMeshProUGUI _cardNameText;
         [SerializeField]
         private TextMeshProUGUI _cardDescriptionText;
+        [SerializeField]
+        private TextMeshProUGUI _cardCostText;
 
         private CardData _cardData;
         private bool _interactable = true;
@@ -32,6 +34,9 @@ namespace SHIN
 
             if (_cardDescriptionText != null)
                 _cardDescriptionText.text = cardData != null ? cardData.Description : string.Empty;
+
+            if (_cardCostText != null)
+                _cardCostText.text = cardData != null ? cardData.Cost.ToString() : string.Empty;
 
             EnsureUiClickable();
         }

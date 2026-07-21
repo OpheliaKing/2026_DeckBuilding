@@ -89,6 +89,7 @@ namespace SHIN
         DEFENSE_UP,
         HP_UP,
         SPEED_UP,
+        MAX_COST_UP,
         CUSTOM,
     }
 

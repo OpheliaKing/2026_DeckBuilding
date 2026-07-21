@@ -35,6 +35,78 @@ namespace SHIN
 
         public int CurrentSpeed => CalculateCurrentSpeed();
 
+        #region Card Cost
+
+        /// <summary>버프/아이템 반영된 최대 카드 코스트</summary>
+        public int MaxCardCost => CalculateMaxCardCost();
+
+        private int _currentCardCost;
+        /// <summary>이번 턴 남은 카드 코스트</summary>
+        public int CurrentCardCost => _currentCardCost;
+
+        /// <summary>
+        /// 카드 사용에 필요한 코스트를 지불할 수 있는지 확인합니다.
+        /// </summary>
+        public bool CanAffordCard(CardData card)
+        {
+            if (card == null)
+                return false;
+
+            return CanAffordCardCost(card.Cost);
+        }
+
+        public bool CanAffordCardCost(int cost)
+        {
+            return cost <= _currentCardCost;
+        }
+
+        /// <summary>
+        /// 카드 코스트를 소모합니다. 부족하면 false.
+        /// </summary>
+        public bool TrySpendCardCost(int cost)
+        {
+            if (cost < 0)
+                cost = 0;
+
+            if (!CanAffordCardCost(cost))
+                return false;
+
+            _currentCardCost -= cost;
+            return true;
+        }
+
+        public bool TrySpendCardCost(CardData card)
+        {
+            if (card == null)
+                return false;
+
+            return TrySpendCardCost(card.Cost);
+        }
+
+        /// <summary>
+        /// 턴 시작 시 현재 코스트를 최대치로 회복합니다.
+        /// </summary>
+        public void RefillCardCost()
+        {
+            _currentCardCost = MaxCardCost;
+        }
+
+        private int CalculateMaxCardCost()
+        {
+            if (_unitData == null)
+            {
+                Debug.LogError("UnitData is null");
+                return 0;
+            }
+
+            int baseCost = Mathf.Max(0, _unitData.unitBaseMaxCardCost);
+            // 아이템/버프로 최대 코스트 증가
+            int costBonus = Mathf.FloorToInt(GetBuffValueSum(CARD_BUFF_EFFECT_TYPE.MAX_COST_UP));
+            return Mathf.Max(0, baseCost + costBonus);
+        }
+
+        #endregion
+
         #region Item
 
         private readonly List<ItemData> _items = new();
@@ -294,6 +366,7 @@ namespace SHIN
             }
 
             _currentHp = MaxHp;
+            RefillCardCost();
         }
 
         /// <summary>

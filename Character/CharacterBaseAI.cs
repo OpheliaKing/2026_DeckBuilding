@@ -73,8 +73,8 @@ namespace SHIN
                 yield break;
             }
 
-            int remainingCost = GetAITurnCostBudget();
-            Debug.Log($"[AI] 턴 시작: {name} / costBudget={remainingCost} / hand={UnitInfo?.Hand?.Count ?? 0}");
+            int remainingCost = UnitInfo != null ? UnitInfo.CurrentCardCost : 0;
+            Debug.Log($"[AI] 턴 시작: {name} / cost={remainingCost}/{UnitInfo?.MaxCardCost ?? 0} / hand={UnitInfo?.Hand?.Count ?? 0}");
 
             while (!IsDead && remainingCost > 0 && !inGame.IsBattleEnded)
             {
@@ -83,12 +83,14 @@ namespace SHIN
                     yield return inGame.WaitUntilCardResolveComplete();
                     if (inGame.IsBattleEnded || IsDead)
                         break;
+                    remainingCost = UnitInfo != null ? UnitInfo.CurrentCardCost : 0;
                     continue;
                 }
 
                 if (inGame.CurrentActor != this)
                     break;
 
+                remainingCost = UnitInfo != null ? UnitInfo.CurrentCardCost : 0;
                 var decision = SelectNextCardPlay(remainingCost);
                 if (decision == null)
                 {
@@ -99,15 +101,8 @@ namespace SHIN
                     break;
                 }
 
-                int cardCost = Mathf.Max(0, decision.Card.Cost);
-                if (cardCost > remainingCost)
-                {
-                    Debug.Log($"[AI] 코스트 부족 → 턴 종료: {name} / need={cardCost} / left={remainingCost}");
-                    break;
-                }
-
                 Debug.Log(
-                    $"[AI] 카드 사용: {decision.Card.Name} → {decision.Target.name} / cost={cardCost}");
+                    $"[AI] 카드 사용: {decision.Card.Name} → {decision.Target.name} / cost={decision.Card.Cost}");
 
                 if (!inGame.TryPlayCard(this, decision.Target, decision.Card))
                 {
@@ -117,8 +112,8 @@ namespace SHIN
                     break;
                 }
 
-                remainingCost -= cardCost;
                 yield return inGame.WaitUntilCardResolveComplete();
+                remainingCost = UnitInfo != null ? UnitInfo.CurrentCardCost : 0;
             }
 
             bool shouldEndTurn = !IsDead &&
@@ -134,16 +129,6 @@ namespace SHIN
 
             Debug.Log($"[AI] EndTurn: {name}");
             inGame.EndTurn();
-        }
-
-        /// <summary>
-        /// 이번 턴에 쓸 수 있는 코스트 예산.
-        /// 코스트 시스템 본구현 전까지는 넉넉히 두고, 실제 제한은 SelectNextCardPlay에서 Card.Cost로 합니다.
-        /// </summary>
-        protected virtual int GetAITurnCostBudget()
-        {
-            // TODO: UnitInfo.MaxCost / CurrentCost 연동
-            return 99;
         }
 
         /// <summary>
@@ -167,7 +152,7 @@ namespace SHIN
                 if (card == null)
                     continue;
 
-                if (card.Cost > remainingCost)
+                if (!UnitInfo.CanAffordCardCost(card.Cost) || card.Cost > remainingCost)
                     continue;
 
                 var target = SelectTargetForCard(card, inGame);

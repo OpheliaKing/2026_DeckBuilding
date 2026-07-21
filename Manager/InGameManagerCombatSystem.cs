@@ -81,6 +81,12 @@ namespace SHIN
                 return;
             }
 
+            if (!CurrentActor.UnitInfo.CanAffordCard(cardObject.CardData))
+            {
+                NotifyInsufficientCardCost(CurrentActor, cardObject.CardData);
+                return;
+            }
+
             if (_isWaitingForTarget &&
                 (_selectedCardObject == cardObject || _selectedCard == cardObject.CardData))
             {
@@ -94,6 +100,22 @@ namespace SHIN
             BeginTargetSelection(_selectedCard);
 
             Debug.Log($"[Combat] 카드 선택: {_selectedCard.Name} ({_selectedCard.CardType})");
+        }
+
+        /// <summary>
+        /// 카드 코스트 부족 시 호출. UI 연동 지점.
+        /// </summary>
+        private void NotifyInsufficientCardCost(CharacterBase user, CardData card)
+        {
+            int need = card != null ? card.Cost : 0;
+            int current = user?.UnitInfo != null ? user.UnitInfo.CurrentCardCost : 0;
+            int max = user?.UnitInfo != null ? user.UnitInfo.MaxCardCost : 0;
+
+            Debug.LogWarning(
+                $"[Combat] 코스트 부족: {card?.Name} / 필요:{need} / 현재:{current}/{max}");
+
+            // TODO: 코스트 부족 UI 출력
+            // PlayerUI?.ShowInsufficientCost(need, current, max);
         }
 
         private void BeginTargetSelection(CardData card)
@@ -223,6 +245,12 @@ namespace SHIN
 
             if (user.IsDead)
                 return false;
+
+            if (!user.UnitInfo.CanAffordCard(card))
+            {
+                NotifyInsufficientCardCost(user, card);
+                return false;
+            }
 
             if (target.IsDead)
                 return CanSelectDeadUnitAsCardTarget(user, target, card);
@@ -633,6 +661,16 @@ namespace SHIN
         {
             if (session == null)
                 return;
+
+            if (session.User?.UnitInfo != null && session.Card != null)
+            {
+                if (!session.User.UnitInfo.TrySpendCardCost(session.Card))
+                {
+                    Debug.LogWarning(
+                        $"[Combat] 카드 소모 시점에 코스트 부족: {session.Card.Name} / " +
+                        $"현재:{session.User.UnitInfo.CurrentCardCost}");
+                }
+            }
 
             ConsumePlayedCard(session.User, session.Card);
 

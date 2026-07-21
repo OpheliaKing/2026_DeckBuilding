@@ -69,6 +69,7 @@ namespace SHIN
         public int unitBaseDefense;
         public int unitBaseHp;
         public int unitBaseSpeed;
+        public int unitBaseMaxCardCost;
         public string unitName;
         public string unitIcon;
         public string unitPrefabPath;

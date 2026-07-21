@@ -238,6 +238,7 @@ namespace SHIN
         private void ActiveTurnStartEffect(CharacterBase character)
         {
             character?.TickBuffsOnTurnStart();
+            character?.UnitInfo?.RefillCardCost();
 
             if (character != null)
             {
