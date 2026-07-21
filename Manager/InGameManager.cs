@@ -163,7 +163,10 @@ namespace SHIN
                 if (character != null)
                 {
                     _playerCharacters.Add(character);
+                    if (unitInfo.UnitType == UNIT_TYPE.NONE)
+                        unitInfo.SetUnitType(UNIT_TYPE.PLAYER);
                     character.InitCharacter(unitInfo);
+                    character.SetAIType(CHARACTER_AI_TYPE.PLAYER);
                 }
             }
 
@@ -216,6 +219,10 @@ namespace SHIN
             var resourceManager = GameManager.Instance.ResourceManager;
             int spawnCount = Mathf.Min(enemyTids.Count, slots.Count);
 
+            var cardDataSO = await GameManager.Instance.GetSOAsync<CardDataSO>(PublicVariable.Address.CardDataSO);
+            if (cardDataSO == null)
+                Debug.LogError("[InGameManager] CardDataSO 로드 실패. 몬스터 기본 카드를 넣을 수 없습니다.");
+
             for (int i = 0; i < spawnCount; i++)
             {
                 var unitData = unitDataSO.GetUnitData(enemyTids[i]);
@@ -246,10 +253,41 @@ namespace SHIN
                 {
                     _enemyCharacters.Add(character);
                     character.InitCharacter(unitData);
+                    character.UnitInfo?.SetUnitType(UNIT_TYPE.NPC);
+                    character.SetAIType(CHARACTER_AI_TYPE.AI);
+                    ApplyUnitDefaultCards(character.UnitInfo, unitData, cardDataSO);
                 }
             }
 
             Debug.Log($"[InGameManager] 적 배치 완료: {_enemyCharacters.Count}마리");
+        }
+
+        /// <summary>
+        /// UnitData.unitCardList의 카드 tid를 CardDataSO에서 조회해 마스터 덱에 넣습니다.
+        /// </summary>
+        private static void ApplyUnitDefaultCards(UnitInfo unitInfo, UnitData unitData, CardDataSO cardDataSO)
+        {
+            if (unitInfo == null || unitData?.unitCardList == null || unitData.unitCardList.Count == 0)
+                return;
+
+            if (cardDataSO == null)
+                return;
+
+            for (int i = 0; i < unitData.unitCardList.Count; i++)
+            {
+                var cardTid = unitData.unitCardList[i];
+                if (string.IsNullOrEmpty(cardTid))
+                    continue;
+
+                if (!cardDataSO.TryGetCardData(cardTid, out var cardData) || cardData == null)
+                {
+                    Debug.LogError(
+                        $"[InGameManager] 유닛 기본 카드를 찾을 수 없습니다: unit={unitData.unitTid} / card={cardTid}");
+                    continue;
+                }
+
+                unitInfo.AddDeckCard(cardData);
+            }
         }
 
         #endregion

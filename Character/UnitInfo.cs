@@ -14,6 +14,14 @@ namespace SHIN
         private UnitData _unitData;
         public UnitData UnitData => _unitData;
 
+        private UNIT_TYPE _unitType = UNIT_TYPE.NONE;
+        public UNIT_TYPE UnitType => _unitType;
+
+        public void SetUnitType(UNIT_TYPE unitType)
+        {
+            _unitType = unitType;
+        }
+
         private int _maxHp;
         public int MaxHp => CalculateMaxHp();
 
@@ -470,5 +478,12 @@ namespace SHIN
                 (cards[i], cards[randomIndex]) = (cards[randomIndex], cards[i]);
             }
         }
+    }
+
+    public enum UNIT_TYPE
+    {
+        NONE,
+        PLAYER,
+        NPC,
     }
 }

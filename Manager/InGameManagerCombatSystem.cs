@@ -11,11 +11,13 @@ namespace SHIN
         private CardData _selectedCard;
         private bool _isWaitingForTarget;
         private bool _isResolvingCard;
+        private bool _isBattleEnded;
         private CardResolveSession _resolveSession;
 
         public CardData SelectedCard => _selectedCard;
         public bool IsWaitingForTarget => _isWaitingForTarget;
         public bool IsResolvingCard => _isResolvingCard;
+        public bool IsBattleEnded => _isBattleEnded;
 
         private sealed class CardResolveSession
         {
@@ -161,13 +163,21 @@ namespace SHIN
                 return;
             }
 
-            if (target == null || target.IsDead)
+            if (target == null)
             {
                 Debug.LogWarning("[Combat] 유효하지 않은 대상입니다.");
                 return;
             }
 
-            if (!IsValidTarget(CurrentActor, target, _selectedCard))
+            if (target.IsDead)
+            {
+                if (!CanSelectDeadUnitAsCardTarget(CurrentActor, target, _selectedCard))
+                {
+                    // TODO: 죽은 유닛 대상 불가 UI
+                    return;
+                }
+            }
+            else if (!IsValidTarget(CurrentActor, target, _selectedCard))
             {
                 if (_selectedCard.CardType == CARD_TYPE.BUFF)
                 {
@@ -186,6 +196,94 @@ namespace SHIN
             ClearCardSelection(keepBuffCamera);
 
             UseCard(user, target, card);
+        }
+
+        /// <summary>
+        /// AI/자동사냥용. 플레이어 조작과 동일한 UseCard 경로로 카드를 사용합니다.
+        /// </summary>
+        public bool TryPlayCard(CharacterBase user, CharacterBase target, CardData card)
+        {
+            if (_isResolvingCard)
+            {
+                Debug.LogWarning("[Combat] 카드 연출 중에는 사용할 수 없습니다.");
+                return false;
+            }
+
+            if (user == null || target == null || card == null)
+            {
+                Debug.LogError("[Combat] TryPlayCard 인자가 null입니다.");
+                return false;
+            }
+
+            if (CurrentActor != user)
+            {
+                Debug.LogWarning($"[Combat] 현재 행동자가 아닙니다: {GetCombatName(user)}");
+                return false;
+            }
+
+            if (user.IsDead)
+                return false;
+
+            if (target.IsDead)
+                return CanSelectDeadUnitAsCardTarget(user, target, card);
+
+            if (!IsValidTarget(user, target, card))
+            {
+                Debug.LogWarning(
+                    $"[Combat] 유효하지 않은 대상: {card.Name} → {GetCombatName(target)}");
+                return false;
+            }
+
+            UseCard(user, target, card);
+            return true;
+        }
+
+        public IEnumerator WaitUntilCardResolveComplete()
+        {
+            while (_isResolvingCard && !_isBattleEnded)
+                yield return null;
+        }
+
+        /// <summary>
+        /// AI가 행동할 카드가 없을 때 전투 종료 여부를 다시 검사합니다.
+        /// </summary>
+        public void EvaluateBattleEndFromAI()
+        {
+            CheckBattleEnd();
+        }
+
+        /// <summary>
+        /// user 기준 카드의 유효 대상 목록을 반환합니다.
+        /// </summary>
+        public List<CharacterBase> GetValidTargets(CharacterBase user, CardData card)
+        {
+            var result = new List<CharacterBase>();
+            if (user == null || card == null)
+                return result;
+
+            CollectValidTargetsFromList(_playerCharacters, user, card, result);
+            CollectValidTargetsFromList(_enemyCharacters, user, card, result);
+            return result;
+        }
+
+        private void CollectValidTargetsFromList(
+            IReadOnlyList<CharacterBase> characters,
+            CharacterBase user,
+            CardData card,
+            List<CharacterBase> result)
+        {
+            if (characters == null)
+                return;
+
+            for (int i = 0; i < characters.Count; i++)
+            {
+                var target = characters[i];
+                if (target == null || target.IsDead)
+                    continue;
+
+                if (IsValidTarget(user, target, card))
+                    result.Add(target);
+            }
         }
 
         /// <summary>
@@ -289,11 +387,15 @@ namespace SHIN
                     break;
 
                 case CARD_BUFF_TARGET_TYPE.ALL:
-                    for (int i = 0; i < _playerCharacters.Count; i++)
                     {
-                        var ally = _playerCharacters[i];
-                        if (ally != null && ally.IsAlive)
-                            targets.Add(ally);
+                        bool userIsPlayer = IsPlayerCharacter(user);
+                        var allies = userIsPlayer ? _playerCharacters : _enemyCharacters;
+                        for (int i = 0; i < allies.Count; i++)
+                        {
+                            var ally = allies[i];
+                            if (ally != null && ally.IsAlive)
+                                targets.Add(ally);
+                        }
                     }
                     break;
             }
@@ -555,16 +657,16 @@ namespace SHIN
             if (user == null || target == null || card == null || target.IsDead)
                 return false;
 
-            bool targetIsPlayer = IsPlayerCharacter(target);
+            bool sameTeam = IsPlayerCharacter(user) == IsPlayerCharacter(target);
 
             switch (card.CardType)
             {
                 case CARD_TYPE.ATTACK:
                 case CARD_TYPE.DEBUFF:
-                    return !targetIsPlayer;
+                    return !sameTeam;
 
                 case CARD_TYPE.DEFENSE:
-                    return targetIsPlayer;
+                    return sameTeam;
 
                 case CARD_TYPE.BUFF:
                     return IsValidBuffTarget(user, target, card);
@@ -577,12 +679,26 @@ namespace SHIN
             }
         }
 
+        /// <summary>
+        /// 죽은 유닛을 카드 대상으로 클릭/선택할 수 있는지.
+        /// 현재는 모든 카드 불가. 부활 등에서 조건만 확장하면 됩니다.
+        /// </summary>
+        private bool CanSelectDeadUnitAsCardTarget(CharacterBase user, CharacterBase target, CardData card)
+        {
+            if (user == null || target == null || card == null || !target.IsDead)
+                return false;
+
+            // TODO: 부활 카드 등 죽은 대상 전용 효과 허용
+            return false;
+        }
+
         private bool IsValidBuffTarget(CharacterBase user, CharacterBase target, CardData card)
         {
             if (user == null || target == null || card == null || target.IsDead)
                 return false;
 
-            if (!IsPlayerCharacter(target))
+            bool sameTeam = IsPlayerCharacter(user) == IsPlayerCharacter(target);
+            if (!sameTeam)
                 return false;
 
             switch (card.BuffTargetType)
@@ -698,17 +814,28 @@ namespace SHIN
             if (character == null)
                 return;
 
-            // 마지막 Hit에서 이미 처리 중/완료면 중복 호출 방지
-            if (character.IsDissolving || character.HasCompletedDeathVisual)
+            bool isPlayerUnit = character.UnitInfo != null &&
+                                character.UnitInfo.UnitType == UNIT_TYPE.PLAYER;
+
+            // 플레이어는 디졸브를 쓰지 않으므로, NPC 디졸브 중복만 방지
+            if (!isPlayerUnit && (character.IsDissolving || character.HasCompletedDeathVisual))
                 return;
 
             Debug.Log($"[Combat] 사망 처리: {GetCombatName(character)}");
 
             RemoveFromTurnSystem(character);
+
+            if (isPlayerUnit)
+            {
+                // 부활 대비: 리스트 유지, 콜라이더/오브젝트 유지
+                StartCoroutine(ProcessDeathRoutine(character));
+                CheckBattleEnd();
+                return;
+            }
+
             _playerCharacters.Remove(character);
             _enemyCharacters.Remove(character);
 
-            // 클릭 불가
             var cols = character.GetComponentsInChildren<Collider>(true);
             for (int i = 0; i < cols.Length; i++)
                 cols[i].enabled = false;
@@ -726,10 +853,20 @@ namespace SHIN
             if (character == null)
                 yield break;
 
+            bool isPlayerUnit = character.UnitInfo != null &&
+                                character.UnitInfo.UnitType == UNIT_TYPE.PLAYER;
+
+            if (isPlayerUnit)
+            {
+                if (!character.TryPlayAnimation(CharacterBase.DeathAnimationName))
+                    character.TryPlayAnimation("Death");
+
+                yield return character.WaitCurrentAnimationEnd(CharacterBase.DeathAnimationName, 2.5f);
+                yield break;
+            }
+
             if (!character.HasCompletedDeathVisual && !character.IsDissolving)
             {
-                // InGameManager에서 직접 열거형을 돌려도 되지만,
-                // 캐릭터 StartCoroutine으로 실행해 중간에 끊기지 않게 한다.
                 var deathRoutine = character.StartCoroutine(character.PlayDeathDissolve(playDeathAnimation: true));
                 yield return deathRoutine;
             }
@@ -745,6 +882,9 @@ namespace SHIN
 
         private void CheckBattleEnd()
         {
+            if (_isBattleEnded)
+                return;
+
             bool anyPlayerAlive = false;
             for (int i = 0; i < _playerCharacters.Count; i++)
             {
@@ -768,13 +908,47 @@ namespace SHIN
             if (!anyEnemyAlive)
             {
                 Debug.Log("[Combat] 전투 승리");
-                FireItemEffects(ITEM_EFFECT_TIMING.BATTLE_END);
+                EndBattle();
             }
             else if (!anyPlayerAlive)
             {
                 Debug.Log("[Combat] 전투 패배");
-                FireItemEffects(ITEM_EFFECT_TIMING.BATTLE_END);
+                EndBattle();
             }
+        }
+
+        private void EndBattle()
+        {
+            if (_isBattleEnded)
+                return;
+
+            _isBattleEnded = true;
+            _isResolvingCard = false;
+            _resolveSession = null;
+            _currentTurnEntry = null;
+
+            StopAllAITurns();
+            ClearCardSelection();
+            PlayerUI?.SetInteractable(false);
+            FireItemEffects(ITEM_EFFECT_TIMING.BATTLE_END);
+        }
+
+        /// <summary>
+        /// 전투 종료 시 모든 캐릭터 AI 루틴을 중단합니다.
+        /// </summary>
+        private void StopAllAITurns()
+        {
+            StopAITurnsForList(_playerCharacters);
+            StopAITurnsForList(_enemyCharacters);
+        }
+
+        private static void StopAITurnsForList(IReadOnlyList<CharacterBase> characters)
+        {
+            if (characters == null)
+                return;
+
+            for (int i = 0; i < characters.Count; i++)
+                characters[i]?.StopAITurn();
         }
 
         private static string GetCombatName(CharacterBase character)

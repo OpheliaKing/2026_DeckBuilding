@@ -72,5 +72,6 @@ namespace SHIN
         public string unitName;
         public string unitIcon;
         public string unitPrefabPath;
+        public List<string> unitCardList;
     }
 }

@@ -34,6 +34,7 @@ namespace SHIN
                 }
 
                 var unitInfo = new UnitInfo(data);
+                unitInfo.SetUnitType(UNIT_TYPE.PLAYER);
                 AddPlayerCharacter(unitInfo);
                 onComplete?.Invoke(unitInfo);
             });

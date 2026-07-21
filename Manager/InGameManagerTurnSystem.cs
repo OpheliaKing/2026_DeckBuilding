@@ -100,6 +100,12 @@ namespace SHIN
         /// </summary>
         public CharacterBase StartNextTurn()
         {
+            if (_isBattleEnded)
+            {
+                Debug.Log("[TurnSystem] 전투가 종료되어 다음 턴을 진행하지 않습니다.");
+                return null;
+            }
+
             var actor = AdvanceToNextTurn();
             if (actor == null)
                 return null;
@@ -181,11 +187,22 @@ namespace SHIN
 
         private void ActivePlayerTurn(CharacterBase character, List<CardData> drawnCards)
         {
+            if (_isBattleEnded)
+                return;
+
             Debug.Log($"[TurnSystem] 플레이어 턴 시작: {GetCharacterName(character)}");
 
             var unitInfo = character.UnitInfo;
             if (unitInfo == null)
                 return;
+
+            // 자동사냥 등: AIType이 AI면 UI 대신 AI 루틴
+            if (character.AIType == CHARACTER_AI_TYPE.AI)
+            {
+                PlayerUI?.SetInteractable(false);
+                character.StartAITurn();
+                return;
+            }
 
             if (PlayerUI == null)
             {
@@ -199,10 +216,23 @@ namespace SHIN
 
         private void ActiveEnemyTurn(CharacterBase character, List<CardData> drawnCards)
         {
+            if (_isBattleEnded)
+                return;
+
             Debug.Log($"[TurnSystem] 적 턴 시작: {GetCharacterName(character)} / 드로우 {drawnCards?.Count ?? 0}장");
 
             PlayerUI?.SetInteractable(false);
-            // TODO: 적 AI가 drawnCards / Hand 기반으로 행동 후 EndTurn() 호출
+
+            if (character == null || character.IsDead)
+                return;
+
+            if (character.AIType == CHARACTER_AI_TYPE.NONE)
+                character.SetAIType(CHARACTER_AI_TYPE.AI);
+
+            if (character.AIType == CHARACTER_AI_TYPE.AI)
+                character.StartAITurn();
+            else
+                Debug.LogWarning($"[TurnSystem] 적 AIType이 AI가 아닙니다: {GetCharacterName(character)} / {character.AIType}");
         }
 
         private void ActiveTurnStartEffect(CharacterBase character)
@@ -261,6 +291,12 @@ namespace SHIN
         /// </summary>
         public CharacterBase EndTurn()
         {
+            if (_isBattleEnded)
+            {
+                Debug.Log("[TurnSystem] 전투가 종료되어 EndTurn을 무시합니다.");
+                return null;
+            }
+
             OnActionFinished();
             return StartNextTurn();
         }
