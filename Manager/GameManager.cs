@@ -45,6 +45,7 @@ namespace SHIN
 
         public void Start()
         {
+            return;
             //아래 코드는 테스트용
             AddPlayerCharacter("player_0001", (unitInfo) =>
             {
