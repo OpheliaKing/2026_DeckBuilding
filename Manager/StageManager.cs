@@ -59,18 +59,29 @@ namespace SHIN
         [ContextMenu("Initialize Stage Run")]
         public void InitializeStageRun()
         {
-            if (TryLoadSave(out StageMapSaveData saveData))
-            {
-                _mapData = saveData.MapData;
-                Debug.Log("[StageManager] 세이브 데이터를 불러왔습니다.");
-            }
-            else
-            {
-                GenerateMap();
-                SaveMapData();
-            }
-
+            EnsureMapData();
             RefreshStageNodeUI();
+        }
+
+        public void ShowStageUI()
+        {
+            EnsureMapData();
+
+            UIManager uiManager = ResolveUIManager();
+            if (uiManager == null)
+                return;
+
+            uiManager.Show(PublicVariable.Address.StageNodeUIPrefab, uiBase =>
+            {
+                if (uiBase is not StageNodeUI stageNodeUI)
+                {
+                    Debug.LogError("[StageManager] StageNodeUI 프리팹에 StageNodeUI 컴포넌트가 없습니다.");
+                    return;
+                }
+
+                _stageNodeUI = stageNodeUI;
+                stageNodeUI.BuildMap(_mapData, OnNodeClicked);
+            });
         }
 
         public void RefreshStageNodeUI()
@@ -99,6 +110,26 @@ namespace SHIN
 
             Debug.Log($"[StageManager] 노드 클릭: id={nodeId}, tid={node.StageTid}, type={node.StageType}");
             // TODO: 이동 처리 및 스테이지 진입
+        }
+
+        #endregion
+
+        #region Map Data
+
+        private void EnsureMapData()
+        {
+            if (_mapData != null && _mapData.Nodes != null && _mapData.Nodes.Count > 0)
+                return;
+
+            if (TryLoadSave(out StageMapSaveData saveData))
+            {
+                _mapData = saveData.MapData;
+                Debug.Log("[StageManager] 세이브 데이터를 불러왔습니다.");
+                return;
+            }
+
+            GenerateMap();
+            SaveMapData();
         }
 
         #endregion
@@ -655,6 +686,17 @@ namespace SHIN
                 Debug.LogError("[StageManager] StageNodeUI를 찾을 수 없습니다.");
 
             return _stageNodeUI;
+        }
+
+        private static UIManager ResolveUIManager()
+        {
+            if (GameManager.Instance == null)
+            {
+                Debug.LogError("[StageManager] GameManager.Instance가 없습니다.");
+                return null;
+            }
+
+            return GameManager.Instance.UIManager;
         }
 
         #endregion

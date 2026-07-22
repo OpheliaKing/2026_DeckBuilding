@@ -8,6 +8,8 @@ namespace SHIN
         [SerializeField] private ResourceManager _resourceManager;
         [SerializeField] private CameraManager _cameraManager;
         [SerializeField] private TimeManager _timeManager;
+        [SerializeField] private UIManager _uiManager;
+        [SerializeField] private StageManager _stageManager;
 
         private GameObject _currentStageObject;
         private InGameManager _inGameManager;
@@ -39,12 +41,32 @@ namespace SHIN
             }
         }
 
+        public UIManager UIManager
+        {
+            get
+            {
+                ManagerBase.EnsureManager(transform, ref _uiManager);
+                return _uiManager;
+            }
+        }
+
         public InGameManager InGameManager => _inGameManager;
-        
-    
+
+        public StageManager StageManager
+        {
+            get
+            {
+                ManagerBase.EnsureManager(transform, ref _stageManager);
+                return _stageManager;
+            }
+        }
+
+
 
         public void Start()
         {
+
+            StageManager.ShowStageUI();
             return;
             //아래 코드는 테스트용
             AddPlayerCharacter("player_0001", (unitInfo) =>
