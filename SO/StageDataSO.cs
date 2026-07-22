@@ -69,4 +69,15 @@ namespace SHIN
         public List<string> rewardTids;
         public string stagePrefabPath;
     }
+
+    public enum STAGE_TYPE
+    {
+
+        NONE,
+        BATTLE_NORMAL,
+        BATTLE_ELITE,
+        BATTLE_BOSS,
+        SHOP,
+        EVENT,
+    }
 }
