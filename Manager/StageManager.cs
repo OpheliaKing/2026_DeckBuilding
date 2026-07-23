@@ -11,12 +11,19 @@ namespace SHIN
         #region Constants
 
         private const int GridX = 5;
-        private const int GridY = 15;
+        private const int GridY = 8;
         private const int MaxNodesPerFloor = 3;
         private const int MinNodesPerFloor = 3;
         private const int MinStartNodes = 2;
         private const int MinOutgoing = 1;
         private const int MaxOutgoing = 2;
+
+        // STAGE_TYPE 배치 규칙 (층 번호는 1부터: 맨 아래=1)
+        private const int MinEliteFloorNumber = 4;
+        private const int MaxEliteCount = 2;
+        private const int MinShopFloorNumber = 3;
+        private const int MaxShopCount = 2;
+        private const int MaxEventCount = 4;
 
         #endregion
 
@@ -164,6 +171,7 @@ namespace SHIN
             ConnectNodes();
             PruneUnreachableNodes();
             _mapData = BuildMapData();
+            AssignStageTypes(_mapData);
         }
 
         private void ClearInternalMap()
@@ -238,7 +246,7 @@ namespace SHIN
                     Floor = node.Floor,
                     Slot = node.Slot,
                     StageTid = string.Empty,
-                    StageType = ResolveStageType(node),
+                    StageType = STAGE_TYPE.NONE,
                     IsVisited = false,
                     IsAvailable = node.Floor == 0,
                     IsCurrent = false
@@ -253,15 +261,93 @@ namespace SHIN
             return mapData;
         }
 
-        private static STAGE_TYPE ResolveStageType(MapNode node)
+        /// <summary>
+        /// 노드 STAGE_TYPE 배치.
+        /// 시작=NORMAL, 종료=BOSS, ELITE/SHOP/EVENT는 층·개수 제한을 지킨다.
+        /// </summary>
+        private void AssignStageTypes(StageMapData mapData)
         {
-            if (node.Floor == 0)
-                return STAGE_TYPE.NONE;
+            if (mapData?.Nodes == null || mapData.Nodes.Count == 0)
+                return;
 
-            if (node.Floor == GridY - 1)
-                return STAGE_TYPE.BATTLE_BOSS;
+            int lastFloor = mapData.GridY - 1;
+            var middleNodes = new List<StageNodeData>();
 
-            return STAGE_TYPE.BATTLE_NORMAL;
+            for (int i = 0; i < mapData.Nodes.Count; i++)
+            {
+                StageNodeData node = mapData.Nodes[i];
+                int floorNumber = node.Floor + 1;
+
+                if (node.Floor == 0)
+                {
+                    node.StageType = STAGE_TYPE.BATTLE_NORMAL;
+                    continue;
+                }
+
+                if (node.Floor == lastFloor)
+                {
+                    node.StageType = STAGE_TYPE.BATTLE_BOSS;
+                    continue;
+                }
+
+                node.StageType = STAGE_TYPE.BATTLE_NORMAL;
+                middleNodes.Add(node);
+            }
+
+            ShuffleList(middleNodes);
+
+            int eliteCount = 0;
+            int shopCount = 0;
+            int eventCount = 0;
+
+            for (int i = 0; i < middleNodes.Count; i++)
+            {
+                StageNodeData node = middleNodes[i];
+                int floorNumber = node.Floor + 1;
+                STAGE_TYPE picked = PickMiddleStageType(
+                    floorNumber,
+                    eliteCount,
+                    shopCount,
+                    eventCount);
+
+                node.StageType = picked;
+
+                if (picked == STAGE_TYPE.BATTLE_ELITE)
+                    eliteCount++;
+                else if (picked == STAGE_TYPE.SHOP)
+                    shopCount++;
+                else if (picked == STAGE_TYPE.EVENT)
+                    eventCount++;
+            }
+        }
+
+        private static STAGE_TYPE PickMiddleStageType(
+            int floorNumber,
+            int eliteCount,
+            int shopCount,
+            int eventCount)
+        {
+            var candidates = new List<STAGE_TYPE> { STAGE_TYPE.BATTLE_NORMAL };
+
+            if (floorNumber >= MinEliteFloorNumber && eliteCount < MaxEliteCount)
+                candidates.Add(STAGE_TYPE.BATTLE_ELITE);
+
+            if (floorNumber >= MinShopFloorNumber && shopCount < MaxShopCount)
+                candidates.Add(STAGE_TYPE.SHOP);
+
+            if (eventCount < MaxEventCount)
+                candidates.Add(STAGE_TYPE.EVENT);
+
+            return candidates[Random.Range(0, candidates.Count)];
+        }
+
+        private static void ShuffleList<T>(IList<T> list)
+        {
+            for (int i = list.Count - 1; i > 0; i--)
+            {
+                int j = Random.Range(0, i + 1);
+                (list[i], list[j]) = (list[j], list[i]);
+            }
         }
 
         #endregion

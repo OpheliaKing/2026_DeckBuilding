@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -23,18 +24,6 @@ namespace SHIN
         private float _spacingY = 90f;
 
         [SerializeField]
-        private Color _nodeColor = new(0.85f, 0.85f, 0.85f, 1f);
-
-        [SerializeField]
-        private Color _startNodeColor = new(0.45f, 0.85f, 0.55f, 1f);
-
-        [SerializeField]
-        private Color _endNodeColor = new(0.9f, 0.4f, 0.4f, 1f);
-
-        [SerializeField]
-        private Color _availableNodeColor = new(1f, 0.92f, 0.55f, 1f);
-
-        [SerializeField]
         private Color _lineColor = new(0.55f, 0.55f, 0.55f, 1f);
 
         [SerializeField]
@@ -43,6 +32,7 @@ namespace SHIN
         private readonly Dictionary<int, StageNodeObjectUI> _nodeObjects = new();
         private Transform _lineRoot;
         private Action<int> _onNodeClicked;
+        private int _buildVersion;
 
         public void BuildMap(StageMapData mapData, Action<int> onNodeClicked)
         {
@@ -59,16 +49,23 @@ namespace SHIN
             }
 
             _onNodeClicked = onNodeClicked;
-            ClearMap();
+            ClearMapVisuals();
+            _onNodeClicked = onNodeClicked;
             SpawnConnectionLines(mapData);
-            SpawnNodeVisuals(mapData);
+            SpawnNodeVisualsAsync(mapData);
         }
 
         public void ClearMap()
         {
+            ClearMapVisuals();
+            _onNodeClicked = null;
+        }
+
+        private void ClearMapVisuals()
+        {
+            _buildVersion++;
             _nodeObjects.Clear();
             _lineRoot = null;
-            _onNodeClicked = null;
 
             if (_stageNodeRoot == null)
                 return;
@@ -99,26 +96,64 @@ namespace SHIN
             }
         }
 
-        private void SpawnNodeVisuals(StageMapData mapData)
+        private async void SpawnNodeVisualsAsync(StageMapData mapData)
         {
+            int version = _buildVersion;
             Vector2 origin = GetGridOrigin(mapData);
+
+            var resourceManager = GameManager.Instance?.ResourceManager;
+            if (resourceManager == null)
+            {
+                Debug.LogError("[StageNodeUI] ResourceManager를 찾을 수 없습니다.");
+                return;
+            }
 
             for (int i = 0; i < mapData.Nodes.Count; i++)
             {
+                if (version != _buildVersion)
+                    return;
+
                 StageNodeData nodeData = mapData.Nodes[i];
-                GameObject go = new($"StageNode_F{nodeData.Floor}_S{nodeData.Slot}");
-                go.transform.SetParent(_stageNodeRoot, false);
+                GameObject go = await resourceManager.InstantiateAsync(
+                    PublicVariable.Address.StageNodeObjectUIPrefab,
+                    _stageNodeRoot);
+
+                if (version != _buildVersion)
+                {
+                    if (go != null)
+                        resourceManager.ReleaseInstance(go);
+                    return;
+                }
+
+                if (go == null)
+                {
+                    Debug.LogError(
+                        $"[StageNodeUI] StageNodeObjectUI 생성 실패: {PublicVariable.Address.StageNodeObjectUIPrefab}");
+                    continue;
+                }
+
+                go.name = $"StageNode_F{nodeData.Floor}_S{nodeData.Slot}";
                 go.transform.SetAsLastSibling();
 
-                var rect = go.AddComponent<RectTransform>();
-                rect.sizeDelta = _nodeSize;
-                rect.anchoredPosition = GetNodePosition(nodeData, origin);
+                var rect = go.transform as RectTransform;
+                if (rect != null)
+                {
+                    if (_nodeSize.x > 0f && _nodeSize.y > 0f)
+                        rect.sizeDelta = _nodeSize;
+                    rect.anchoredPosition = GetNodePosition(nodeData, origin);
+                }
 
-                var image = go.AddComponent<Image>();
-                image.color = GetNodeColor(nodeData, mapData);
-                image.raycastTarget = true;
+                var nodeObjectUI = go.GetComponent<StageNodeObjectUI>();
+                if (nodeObjectUI == null)
+                    nodeObjectUI = go.GetComponentInChildren<StageNodeObjectUI>(true);
 
-                var nodeObjectUI = go.AddComponent<StageNodeObjectUI>();
+                if (nodeObjectUI == null)
+                {
+                    Debug.LogError("[StageNodeUI] StageNodeObjectUI 컴포넌트가 없습니다.");
+                    resourceManager.ReleaseInstance(go);
+                    continue;
+                }
+
                 nodeObjectUI.Initialize(nodeData, HandleNodeClicked);
                 _nodeObjects[nodeData.NodeId] = nodeObjectUI;
             }
@@ -188,20 +223,6 @@ namespace SHIN
             var image = go.AddComponent<Image>();
             image.color = _lineColor;
             image.raycastTarget = false;
-        }
-
-        private Color GetNodeColor(StageNodeData node, StageMapData mapData)
-        {
-            if (node.IsAvailable)
-                return _availableNodeColor;
-
-            if (node.Floor == 0)
-                return _startNodeColor;
-
-            if (node.Floor == mapData.GridY - 1)
-                return _endNodeColor;
-
-            return _nodeColor;
         }
 
         private Vector2 GetGridOrigin(StageMapData mapData)
