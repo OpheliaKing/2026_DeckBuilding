@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -15,6 +14,9 @@ namespace SHIN
         private Transform _stageNodeRoot;
 
         [SerializeField]
+        private ScrollRect _scrollRect;
+
+        [SerializeField]
         private Vector2 _nodeSize = new(48f, 48f);
 
         [SerializeField]
@@ -22,6 +24,9 @@ namespace SHIN
 
         [SerializeField]
         private float _spacingY = 90f;
+
+        [SerializeField]
+        private float _contentPadding = 80f;
 
         [SerializeField]
         private Color _lineColor = new(0.55f, 0.55f, 0.55f, 1f);
@@ -32,6 +37,7 @@ namespace SHIN
         private readonly Dictionary<int, StageNodeObjectUI> _nodeObjects = new();
         private Transform _lineRoot;
         private Action<int> _onNodeClicked;
+        private StageMapData _mapData;
         private int _buildVersion;
 
         public void BuildMap(StageMapData mapData, Action<int> onNodeClicked)
@@ -48,17 +54,72 @@ namespace SHIN
                 return;
             }
 
+            EnsureScrollRect();
+            _mapData = mapData;
             _onNodeClicked = onNodeClicked;
             ClearMapVisuals();
             _onNodeClicked = onNodeClicked;
+            UpdateContentSize(mapData);
             SpawnConnectionLines(mapData);
             SpawnNodeVisualsAsync(mapData);
+        }
+
+        /// <summary>
+        /// 선택 가능한 노드가 보이도록 스크롤 위치를 갱신한다.
+        /// </summary>
+        public void ScrollToAvailableNodes()
+        {
+            if (_mapData == null)
+                return;
+
+            EnsureScrollRect();
+            if (_scrollRect == null)
+                return;
+
+            float focusFloor = GetFocusFloor(_mapData);
+            float maxFloor = Mathf.Max(1, _mapData.GridY - 1);
+            // floor 0(아래) → 0, 보스(위) → 1. Unity verticalNormalizedPosition: 0=아래, 1=위
+            float normalized = Mathf.Clamp01(focusFloor / maxFloor);
+
+            Canvas.ForceUpdateCanvases();
+            _scrollRect.StopMovement();
+            _scrollRect.verticalNormalizedPosition = normalized;
+            _scrollRect.horizontalNormalizedPosition = 0.5f;
+        }
+
+        public void SetVisible(bool visible)
+        {
+            gameObject.SetActive(visible);
+        }
+
+        /// <summary>
+        /// 맵 진행 상태만 갱신한다. (노드 재생성 없음)
+        /// </summary>
+        public void ApplyMapProgress(StageMapData mapData)
+        {
+            if (mapData == null)
+                return;
+
+            _mapData = mapData;
+
+            for (int i = 0; i < mapData.Nodes.Count; i++)
+            {
+                StageNodeData node = mapData.Nodes[i];
+                if (!_nodeObjects.TryGetValue(node.NodeId, out StageNodeObjectUI nodeObject))
+                    continue;
+
+                nodeObject.Refresh(node);
+            }
+
+            if (gameObject.activeInHierarchy)
+                ScrollToAvailableNodes();
         }
 
         public void ClearMap()
         {
             ClearMapVisuals();
             _onNodeClicked = null;
+            _mapData = null;
         }
 
         private void ClearMapVisuals()
@@ -72,6 +133,67 @@ namespace SHIN
 
             for (int i = _stageNodeRoot.childCount - 1; i >= 0; i--)
                 DestroyImmediateSafe(_stageNodeRoot.GetChild(i).gameObject);
+        }
+
+        private void EnsureScrollRect()
+        {
+            if (_scrollRect != null)
+                return;
+
+            _scrollRect = GetComponentInChildren<ScrollRect>(true);
+            if (_scrollRect == null)
+                Debug.LogWarning("[StageNodeUI] ScrollRect를 찾을 수 없습니다.");
+        }
+
+        private void UpdateContentSize(StageMapData mapData)
+        {
+            RectTransform content = ResolveContentRect();
+            if (content == null)
+                return;
+
+            float width = (mapData.GridX - 1) * _spacingX + _nodeSize.x + _contentPadding * 2f;
+            float height = (mapData.GridY - 1) * _spacingY + _nodeSize.y + _contentPadding * 2f;
+            content.sizeDelta = new Vector2(width, height);
+        }
+
+        private RectTransform ResolveContentRect()
+        {
+            if (_scrollRect != null && _scrollRect.content != null)
+                return _scrollRect.content;
+
+            return _stageNodeRoot as RectTransform;
+        }
+
+        private static float GetFocusFloor(StageMapData mapData)
+        {
+            float sum = 0f;
+            int count = 0;
+
+            for (int i = 0; i < mapData.Nodes.Count; i++)
+            {
+                StageNodeData node = mapData.Nodes[i];
+                if (!node.IsAvailable)
+                    continue;
+
+                sum += node.Floor;
+                count++;
+            }
+
+            if (count == 0)
+            {
+                if (mapData.CurrentNodeId >= 0)
+                {
+                    for (int i = 0; i < mapData.Nodes.Count; i++)
+                    {
+                        if (mapData.Nodes[i].NodeId == mapData.CurrentNodeId)
+                            return mapData.Nodes[i].Floor;
+                    }
+                }
+
+                return 0f;
+            }
+
+            return sum / count;
         }
 
         private void SpawnConnectionLines(StageMapData mapData)
@@ -157,6 +279,9 @@ namespace SHIN
                 nodeObjectUI.Initialize(nodeData, HandleNodeClicked);
                 _nodeObjects[nodeData.NodeId] = nodeObjectUI;
             }
+
+            if (version == _buildVersion)
+                ScrollToAvailableNodes();
         }
 
         private void HandleNodeClicked(int nodeId)

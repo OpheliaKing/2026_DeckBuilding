@@ -946,16 +946,16 @@ namespace SHIN
             if (!anyEnemyAlive)
             {
                 Debug.Log("[Combat] 전투 승리");
-                EndBattle();
+                EndBattle(isVictory: true);
             }
             else if (!anyPlayerAlive)
             {
                 Debug.Log("[Combat] 전투 패배");
-                EndBattle();
+                EndBattle(isVictory: false);
             }
         }
 
-        private void EndBattle()
+        private void EndBattle(bool isVictory)
         {
             if (_isBattleEnded)
                 return;
@@ -969,6 +969,8 @@ namespace SHIN
             ClearCardSelection();
             PlayerUI?.SetInteractable(false);
             FireItemEffects(ITEM_EFFECT_TIMING.BATTLE_END);
+
+            GameManager.Instance?.StageManager?.OnBattleFinished(isVictory);
         }
 
         /// <summary>

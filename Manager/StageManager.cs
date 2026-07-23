@@ -25,6 +25,9 @@ namespace SHIN
         private const int MaxShopCount = 2;
         private const int MaxEventCount = 4;
 
+        // TODO: 타입별 스테이지 풀로 교체
+        private const string DefaultBattleStageTid = "stage_0001";
+
         #endregion
 
         #region Serialized Fields
@@ -33,7 +36,7 @@ namespace SHIN
         private StageNodeUI _stageNodeUI;
 
         [SerializeField]
-        private bool _initializeOnStart = true;
+        private bool _initializeOnStart = false;
 
         #endregion
 
@@ -48,6 +51,7 @@ namespace SHIN
         private StageMapData _mapData;
         private readonly List<MapNode> _allNodes = new();
         private readonly List<MapNode>[] _nodesByFloor = new List<MapNode>[GridY];
+        private int _activeBattleNodeId = -1;
 
         #endregion
 
@@ -116,7 +120,178 @@ namespace SHIN
                 return;
 
             Debug.Log($"[StageManager] 노드 클릭: id={nodeId}, tid={node.StageTid}, type={node.StageType}");
-            // TODO: 이동 처리 및 스테이지 진입
+            EnterNode(node);
+        }
+
+        /// <summary>
+        /// 인게임 전투 종료 후 호출. 승리 시 클리어→리워드→StageNodeUI 플로우로 이어진다.
+        /// </summary>
+        public void OnBattleFinished(bool isVictory)
+        {
+            GameManager.Instance?.ClearInGameStage();
+
+            if (isVictory && _activeBattleNodeId >= 0)
+            {
+                ApplyNodeCleared(_activeBattleNodeId);
+                SaveMapData();
+                StartStageClearRewardFlow();
+                return;
+            }
+
+            if (!isVictory)
+                Debug.Log("[StageManager] 전투 패배 - 맵 진행은 유지합니다.");
+
+            _activeBattleNodeId = -1;
+            ReturnToStageNodeUI();
+        }
+
+        #endregion
+
+        #region Stage Clear Reward Flow
+
+        /// <summary>
+        /// 스테이지 클리어 후 플로우 진입.
+        /// 클리어 → 리워드 UI 출력 → 리워드 선택 → StageNodeUI 이동
+        /// </summary>
+        private void StartStageClearRewardFlow()
+        {
+            OnStageCleared();
+            ShowRewardUI();
+
+            // TODO: 리워드 UI에서 선택 완료 시 OnRewardSelected() 호출로 교체
+            // 현재는 리워드 UI가 없어 바로 StageNodeUI로 이동
+            OnRewardSelected();
+        }
+
+        /// <summary>
+        /// 스테이지(노드) 클리어 직후 처리.
+        /// </summary>
+        private void OnStageCleared()
+        {
+            // TODO: 클리어 연출 / 클리어 카운트 / 업적 등
+            Debug.Log($"[StageManager] 스테이지 클리어: nodeId={_activeBattleNodeId}");
+        }
+
+        /// <summary>
+        /// 리워드 UI 출력.
+        /// </summary>
+        private void ShowRewardUI()
+        {
+            // TODO: UIManager.Show로 리워드 UI 프리팹 호출
+            // TODO: 리워드 후보 생성 후 UI에 전달
+            // TODO: 선택 완료 콜백에서 OnRewardSelected() 호출
+            Debug.Log("[StageManager] 리워드 UI 출력 (미구현)");
+        }
+
+        /// <summary>
+        /// 리워드 선택 완료 후 StageNodeUI로 이동.
+        /// </summary>
+        private void OnRewardSelected()
+        {
+            // TODO: 선택한 리워드(카드/아이템 등)를 플레이어에게 반영
+
+            _activeBattleNodeId = -1;
+            ReturnToStageNodeUI();
+        }
+
+        #endregion
+
+        #region Node Enter / Battle Flow
+
+        private void EnterNode(StageNodeData node)
+        {
+            switch (node.StageType)
+            {
+                case STAGE_TYPE.BATTLE_NORMAL:
+                case STAGE_TYPE.BATTLE_ELITE:
+                case STAGE_TYPE.BATTLE_BOSS:
+                    EnterBattle(node);
+                    break;
+                case STAGE_TYPE.SHOP:
+                case STAGE_TYPE.EVENT:
+                    Debug.Log($"[StageManager] 미구현 노드 타입: {node.StageType}");
+                    break;
+                default:
+                    Debug.LogWarning($"[StageManager] 처리할 수 없는 노드 타입: {node.StageType}");
+                    break;
+            }
+        }
+
+        private void EnterBattle(StageNodeData node)
+        {
+            if (GameManager.Instance == null)
+            {
+                Debug.LogError("[StageManager] GameManager.Instance가 없습니다.");
+                return;
+            }
+
+            EnsureBattleStageTid(node);
+            if (string.IsNullOrEmpty(node.StageTid))
+            {
+                Debug.LogError($"[StageManager] StageTid가 비어 있습니다. nodeId={node.NodeId}");
+                return;
+            }
+
+            _activeBattleNodeId = node.NodeId;
+            SetStageNodeUIVisible(false);
+            GameManager.Instance.InGameStart(node.StageTid);
+        }
+
+        private static void EnsureBattleStageTid(StageNodeData node)
+        {
+            if (!string.IsNullOrEmpty(node.StageTid))
+                return;
+
+            // 임시: 전투 스테이지 SO가 하나라 기본 tid 사용
+            node.StageTid = DefaultBattleStageTid;
+        }
+
+        private void ApplyNodeCleared(int clearedNodeId)
+        {
+            StageNodeData cleared = FindNode(clearedNodeId);
+            if (cleared == null)
+                return;
+
+            for (int i = 0; i < _mapData.Nodes.Count; i++)
+            {
+                StageNodeData node = _mapData.Nodes[i];
+                node.IsAvailable = false;
+                node.IsCurrent = false;
+            }
+
+            cleared.IsVisited = true;
+            cleared.IsAvailable = false;
+            cleared.IsCurrent = true;
+            _mapData.CurrentNodeId = clearedNodeId;
+
+            for (int i = 0; i < cleared.NextNodeIds.Count; i++)
+            {
+                StageNodeData next = FindNode(cleared.NextNodeIds[i]);
+                if (next == null)
+                    continue;
+
+                next.IsAvailable = true;
+            }
+        }
+
+        private void ReturnToStageNodeUI()
+        {
+            if (_stageNodeUI == null)
+            {
+                ShowStageUI();
+                return;
+            }
+
+            SetStageNodeUIVisible(true);
+            _stageNodeUI.ApplyMapProgress(_mapData);
+        }
+
+        private void SetStageNodeUIVisible(bool visible)
+        {
+            if (_stageNodeUI == null)
+                return;
+
+            _stageNodeUI.SetVisible(visible);
         }
 
         #endregion
@@ -318,6 +493,25 @@ namespace SHIN
                     shopCount++;
                 else if (picked == STAGE_TYPE.EVENT)
                     eventCount++;
+            }
+
+            AssignBattleStageTids(mapData);
+        }
+
+        private static void AssignBattleStageTids(StageMapData mapData)
+        {
+            for (int i = 0; i < mapData.Nodes.Count; i++)
+            {
+                StageNodeData node = mapData.Nodes[i];
+                switch (node.StageType)
+                {
+                    case STAGE_TYPE.BATTLE_NORMAL:
+                    case STAGE_TYPE.BATTLE_ELITE:
+                    case STAGE_TYPE.BATTLE_BOSS:
+                        if (string.IsNullOrEmpty(node.StageTid))
+                            node.StageTid = DefaultBattleStageTid;
+                        break;
+                }
             }
         }
 

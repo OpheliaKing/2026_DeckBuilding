@@ -67,7 +67,7 @@ namespace SHIN
         {
 
             StageManager.ShowStageUI();
-            return;
+
             //아래 코드는 테스트용
             AddPlayerCharacter("player_0001", (unitInfo) =>
             {
@@ -83,6 +83,8 @@ namespace SHIN
 
                 unitInfo.AddItem("test_0001");
             });
+
+            return;
 
             InGameStart("stage_0001");
         }
@@ -112,6 +114,14 @@ namespace SHIN
 
                 LoadStagePrefab(stageData);
             });
+        }
+
+        /// <summary>
+        /// 인게임 스테이지 인스턴스를 해제합니다.
+        /// </summary>
+        public void ClearInGameStage()
+        {
+            ClearCurrentStage();
         }
 
         private void LoadStagePrefab(StageData stageData)

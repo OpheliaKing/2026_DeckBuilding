@@ -10,8 +10,14 @@ namespace SHIN
     /// </summary>
     public class StageNodeObjectUI : MonoBehaviour, IPointerClickHandler
     {
+        private const string AnimSelectAble = "SelectAble";
+        private const string AnimNone = "None";
+
         [SerializeField]
         private Image _nodeIcon;
+
+        [SerializeField]
+        private Animator _animator;
 
         private StageNodeData _nodeData;
         private Action<int> _onClicked;
@@ -43,6 +49,19 @@ namespace SHIN
         private void RefreshVisual()
         {
             UpdateNodeIconAsync();
+            UpdateSelectAbleAnimation();
+        }
+
+        private void UpdateSelectAbleAnimation()
+        {
+            if (_animator == null)
+                _animator = GetComponent<Animator>();
+
+            if (_animator == null || _nodeData == null)
+                return;
+
+            string stateName = _nodeData.IsAvailable ? AnimSelectAble : AnimNone;
+            _animator.Play(stateName, 0, 0f);
         }
 
         private async void UpdateNodeIconAsync()
