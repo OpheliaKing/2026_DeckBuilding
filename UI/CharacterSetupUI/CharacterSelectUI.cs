@@ -1,29 +1,43 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace SHIN
 {
     /// <summary>
-    /// 캐릭터 선택 UI. CharacterSelectObject로부터 리스트를 받아 슬롯을 생성한다.
+    /// 캐릭터 선택 UI. 슬롯 클릭은 미리보기, 확정 버튼으로 선택 데이터를 부모에 전달한다.
     /// </summary>
     public class CharacterSelectUI : UIBase
     {
         [SerializeField]
         private Transform _characterButtonRoot;
 
+        [SerializeField]
+        private Button _confirmButton;
+
         private readonly List<CharacterSelectSlotUI> _slots = new();
-        private Action<CharacterSelectData> _onSlotSelected;
+        private Action<CharacterSelectData> _onConfirmed;
+        private Action<CharacterSelectData> _onPreviewChanged;
         private CharacterSelectData _selectedData;
         private int _setupVersion;
 
+        public CharacterSelectData SelectedData => _selectedData;
+
         /// <summary>
-        /// 캐릭터 리스트로 슬롯을 생성하고 클릭 콜백을 연결한다.
+        /// 캐릭터 리스트로 슬롯을 생성한다.
+        /// onConfirmed: 확정 버튼 시 호출.
+        /// onPreviewChanged: 슬롯 클릭(미리보기) 시 호출. null 가능.
         /// </summary>
-        public void Setup(IReadOnlyList<CharacterSelectData> characterList, Action<CharacterSelectData> onSlotSelected)
+        public void Setup(
+            IReadOnlyList<CharacterSelectData> characterList,
+            Action<CharacterSelectData> onConfirmed,
+            Action<CharacterSelectData> onPreviewChanged = null)
         {
-            _onSlotSelected = onSlotSelected;
+            _onConfirmed = onConfirmed;
+            _onPreviewChanged = onPreviewChanged;
             ClearSlots();
+            BindConfirmButton();
 
             if (characterList == null || characterList.Count == 0)
             {
@@ -44,6 +58,44 @@ namespace SHIN
         {
             _selectedData = data;
             RefreshSelection();
+        }
+
+        /// <summary>
+        /// Inspector 확정 버튼에서 연결할 수 있다.
+        /// </summary>
+        public void OnClickConfirm()
+        {
+            if (_selectedData == null)
+            {
+                Debug.LogWarning("[CharacterSelectUI] 선택된 캐릭터가 없습니다.");
+                return;
+            }
+
+            _onConfirmed?.Invoke(_selectedData);
+        }
+
+        private void BindConfirmButton()
+        {
+            if (_confirmButton == null)
+                _confirmButton = FindConfirmButton();
+
+            if (_confirmButton == null)
+                return;
+
+            _confirmButton.onClick.RemoveListener(OnClickConfirm);
+            _confirmButton.onClick.AddListener(OnClickConfirm);
+        }
+
+        private Button FindConfirmButton()
+        {
+            Button[] buttons = GetComponentsInChildren<Button>(true);
+            for (int i = 0; i < buttons.Length; i++)
+            {
+                if (buttons[i] != null && buttons[i].gameObject.name == "SelectButton")
+                    return buttons[i];
+            }
+
+            return null;
         }
 
         private async void SetupSlotsAsync(IReadOnlyList<CharacterSelectData> characterList)
@@ -99,8 +151,16 @@ namespace SHIN
                 _slots.Add(slot);
             }
 
-            if (version == _setupVersion)
-                RefreshSelection();
+            if (version != _setupVersion)
+                return;
+
+            if (_selectedData == null && characterList.Count > 0)
+                _selectedData = characterList[0];
+
+            RefreshSelection();
+
+            if (_selectedData != null)
+                _onPreviewChanged?.Invoke(_selectedData);
         }
 
         private void HandleSlotClicked(CharacterSelectData data)
@@ -110,7 +170,7 @@ namespace SHIN
 
             _selectedData = data;
             RefreshSelection();
-            _onSlotSelected?.Invoke(data);
+            _onPreviewChanged?.Invoke(data);
         }
 
         private void RefreshSelection()
@@ -167,6 +227,9 @@ namespace SHIN
 
         private void OnDestroy()
         {
+            if (_confirmButton != null)
+                _confirmButton.onClick.RemoveListener(OnClickConfirm);
+
             ClearSlots();
         }
     }

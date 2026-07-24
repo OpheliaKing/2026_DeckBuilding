@@ -6,8 +6,8 @@ namespace SHIN
 {
     /// <summary>
     /// 캐릭터 선택 화면 로직.
-    /// SO 로드 → UIManager로 CharacterSelectUI 표시 → 슬롯 콜백으로 선택/모델 갱신.
-    /// 모델은 tid별 캐시 후 활성/비활성으로 전환한다.
+    /// SO 로드 → UIManager로 UnitSetupUI 표시 → 미리보기 콜백으로 모델 갱신.
+    /// 모델은 PrefabPath별 캐시 후 활성/비활성으로 전환한다.
     /// </summary>
     public class CharacterSelectObject : MonoBehaviour
     {
@@ -16,7 +16,7 @@ namespace SHIN
 
         private CharacterSelectDataSO _dataSO;
         private CharacterSelectData _selectedData;
-        private CharacterSelectUI _characterSelectUI;
+        private UnitSetupUI _unitSetupUI;
         private CharacterSelectModel _currentModel;
         private string _currentModelKey;
         private bool _isShowing;
@@ -35,7 +35,7 @@ namespace SHIN
         }
 
         /// <summary>
-        /// SO 로드 후 CharacterSelectUI를 열고 첫 캐릭터를 선택한다.
+        /// SO 로드 후 UnitSetupUI를 연다.
         /// </summary>
         public void Show()
         {
@@ -48,18 +48,19 @@ namespace SHIN
         {
             _isShowing = false;
             HideAllCachedModels();
+            UnbindUnitSetupUI();
 
-            if (_characterSelectUI != null)
+            if (_unitSetupUI != null)
             {
                 GameManager.Instance?.UIManager?.Close();
-                _characterSelectUI = null;
+                _unitSetupUI = null;
             }
 
             gameObject.SetActive(false);
         }
 
         /// <summary>
-        /// CharacterSelectUI 슬롯 클릭 콜백.
+        /// UnitSetupUI 캐릭터 미리보기 콜백.
         /// </summary>
         public void OnCharacterSlotSelected(CharacterSelectData data)
         {
@@ -90,7 +91,6 @@ namespace SHIN
                 return;
 
             _selectedData = data;
-            _characterSelectUI?.SetSelected(data);
             ShowModel(data);
             OnCharacterSelected?.Invoke(_selectedData);
         }
@@ -100,7 +100,6 @@ namespace SHIN
             if (data == null)
                 return null;
 
-            // PrefabPath가 모델 고유 키. Tid 중복이어도 모델을 구분한다.
             if (!string.IsNullOrEmpty(data.PrefabPath))
                 return data.PrefabPath;
 
@@ -115,7 +114,7 @@ namespace SHIN
             if (!_isShowing)
                 return;
 
-            OpenCharacterSelectUI();
+            OpenUnitSetupUI();
         }
 
         private async System.Threading.Tasks.Task<bool> EnsureDataSOAsync()
@@ -142,7 +141,7 @@ namespace SHIN
             return true;
         }
 
-        private void OpenCharacterSelectUI()
+        private void OpenUnitSetupUI()
         {
             var uiManager = GameManager.Instance?.UIManager;
             if (uiManager == null)
@@ -151,31 +150,41 @@ namespace SHIN
                 return;
             }
 
-            uiManager.Show(PublicVariable.Address.CharacterSelectUIPrefab, uiBase =>
+            uiManager.Show(PublicVariable.Address.UnitSetupUIPrefab, uiBase =>
             {
                 if (!_isShowing)
                     return;
 
-                if (uiBase is not CharacterSelectUI selectUI)
+                if (uiBase is not UnitSetupUI unitSetupUI)
                 {
-                    Debug.LogError("[CharacterSelectObject] CharacterSelectUI 컴포넌트가 없습니다.");
+                    Debug.LogError("[CharacterSelectObject] UnitSetupUI 컴포넌트가 없습니다.");
                     return;
                 }
 
-                _characterSelectUI = selectUI;
-
-                var list = new List<CharacterSelectData>(_dataSO.CharacterSelectDatas);
-                selectUI.Setup(list, OnCharacterSlotSelected);
-
-                CharacterSelectData first = _dataSO.GetCharacterSelectData(0);
-                if (first == null || string.IsNullOrEmpty(first.Tid))
-                {
-                    Debug.LogError("[CharacterSelectObject] 첫 번째 캐릭터 데이터가 유효하지 않습니다.");
-                    return;
-                }
-
-                SelectCharacter(first);
+                UnbindUnitSetupUI();
+                _unitSetupUI = unitSetupUI;
+                _unitSetupUI.OnCharacterPreviewChanged += OnCharacterSlotSelected;
+                _unitSetupUI.OnSetupCompleted += HandleSetupCompleted;
+                _unitSetupUI.BeginSetup();
             });
+        }
+
+        private void HandleSetupCompleted(UnitInfo unitInfo)
+        {
+            UnbindUnitSetupUI();
+            _unitSetupUI = null;
+            _isShowing = false;
+            HideAllCachedModels();
+            gameObject.SetActive(false);
+        }
+
+        private void UnbindUnitSetupUI()
+        {
+            if (_unitSetupUI == null)
+                return;
+
+            _unitSetupUI.OnCharacterPreviewChanged -= OnCharacterSlotSelected;
+            _unitSetupUI.OnSetupCompleted -= HandleSetupCompleted;
         }
 
         private void ShowModel(CharacterSelectData data)
@@ -190,7 +199,6 @@ namespace SHIN
                 return;
             }
 
-            // 이미 표시 중이면 스킵
             if (_currentModelKey == cacheKey &&
                 _modelCache.TryGetValue(cacheKey, out CachedModel current) &&
                 current.GameObject != null &&
@@ -199,7 +207,6 @@ namespace SHIN
                 return;
             }
 
-            // 캐시된 모델이면 활성/비활성만 전환
             if (_modelCache.TryGetValue(cacheKey, out CachedModel cached) && cached.GameObject != null)
             {
                 ActivateCachedModel(cacheKey);
@@ -320,9 +327,6 @@ namespace SHIN
             _currentModel = null;
         }
 
-        /// <summary>
-        /// 캐시된 모델을 모두 Addressables 해제한다. Hide 종료/오브젝트 파괴 시 사용.
-        /// </summary>
         private void ReleaseAllCachedModels()
         {
             var resourceManager = GameManager.Instance?.ResourceManager;
@@ -346,6 +350,7 @@ namespace SHIN
 
         private void OnDestroy()
         {
+            UnbindUnitSetupUI();
             ReleaseAllCachedModels();
         }
 
