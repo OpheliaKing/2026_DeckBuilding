@@ -61,6 +61,60 @@ namespace SHIN
         }
 
         /// <summary>
+        /// 스택에 올리지 않고, 지정 부모 아래에 UI 프리팹만 생성한다.
+        /// </summary>
+        public void Create(string address, Transform parent, Action<GameObject> onComplete)
+        {
+            CreateAsyncInternal(address, parent, onComplete);
+        }
+
+        public async System.Threading.Tasks.Task<GameObject> CreateAsync(string address, Transform parent)
+        {
+            if (string.IsNullOrEmpty(address))
+            {
+                Debug.LogError("[UIManager] address가 비어 있습니다.");
+                return null;
+            }
+
+            if (parent == null)
+            {
+                Debug.LogError("[UIManager] parent가 null입니다.");
+                return null;
+            }
+
+            ResourceManager resourceManager = ResolveResourceManager();
+            if (resourceManager == null)
+                return null;
+
+            GameObject uiObject = await resourceManager.InstantiateAsync(address, parent);
+            if (uiObject == null)
+                Debug.LogError($"[UIManager] UI 생성 실패: {address}");
+
+            return uiObject;
+        }
+
+        private async void CreateAsyncInternal(string address, Transform parent, Action<GameObject> onComplete)
+        {
+            GameObject result = await CreateAsync(address, parent);
+            onComplete?.Invoke(result);
+        }
+
+        /// <summary>
+        /// Create로 만든 UI 인스턴스를 해제한다.
+        /// </summary>
+        public void ReleaseCreated(GameObject uiObject)
+        {
+            if (uiObject == null)
+                return;
+
+            ResourceManager resourceManager = ResolveResourceManager();
+            if (resourceManager != null)
+                resourceManager.ReleaseInstance(uiObject);
+            else
+                Destroy(uiObject);
+        }
+
+        /// <summary>
         /// 스택 최상단 UI를 닫고 이전 UI를 다시 표시한다.
         /// </summary>
         public bool Close()

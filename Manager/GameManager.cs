@@ -66,7 +66,7 @@ namespace SHIN
         public void Start()
         {
 
-            StageManager.ShowStageUI();
+            //StageManager.ShowStageUI();
 
             //아래 코드는 테스트용
             AddPlayerCharacter("player_0001", (unitInfo) =>
@@ -87,6 +87,11 @@ namespace SHIN
             return;
 
             InGameStart("stage_0001");
+        }
+
+        public void GameStart()
+        {
+            
         }
 
         public void InGameStart(string stageTid)
