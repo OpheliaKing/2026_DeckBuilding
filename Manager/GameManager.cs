@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace SHIN
@@ -11,8 +10,13 @@ namespace SHIN
         [SerializeField] private UIManager _uiManager;
         [SerializeField] private StageManager _stageManager;
 
+        private CharacterSelectObject _characterSelectObject;
+        private GameObject _characterSelectObjectInstance;
         private GameObject _currentStageObject;
         private InGameManager _inGameManager;
+        private bool _isBooting;
+        private bool _hasSaveData;
+        private UnitSetupUI _bootUnitSetupUI;
 
         public ResourceManager ResourceManager
         {
@@ -61,37 +65,189 @@ namespace SHIN
             }
         }
 
-
+        /// <summary>BootFlow에서 확인한 세이브 존재 여부.</summary>
+        public bool HasSaveData => _hasSaveData;
 
         public void Start()
         {
-
-            //StageManager.ShowStageUI();
-
-            //아래 코드는 테스트용
-            AddPlayerCharacter("player_0001", (unitInfo) =>
-            {
-                unitInfo.SetEquipType(CHARACTER_EQUIP_TYPE.SWORD);
-                if (PlayerCharacters.Count > 0)
-                {
-                    var cardTids = new List<string> { "card_001", "card_001", "card_buff_001" };
-                    AddCard(PlayerCharacters[0], cardTids, (unitInfo) =>
-                    {
-                        Debug.Log($"[GameManager] 카드 추가 완료: {unitInfo.DeckCardList.Count}");
-                    }); ;
-                }
-
-                unitInfo.AddItem("test_0001");
-            });
-
-            return;
-
-            InGameStart("stage_0001");
+            BootFlow();
         }
 
         public void GameStart()
         {
-            
+            BootFlow();
+        }
+
+        /// <summary>
+        /// 세이브 유무만 확인한 뒤 StartUI를 연다.
+        /// 실제 새 게임/이어하기는 StartUI 시작 버튼에서 분기한다.
+        /// </summary>
+        public void BootFlow()
+        {
+            if (_isBooting)
+                return;
+
+            _isBooting = true;
+            _hasSaveData = StageManager.HasSaveData();
+            Debug.Log($"[GameManager] BootFlow 세이브 유무: {_hasSaveData}");
+            ShowStartUI();
+        }
+
+        /// <summary>
+        /// StartUI 새 게임 버튼.
+        /// </summary>
+        public void OnTitleNewGameClicked()
+        {
+            StartNewRunCharacterSetup();
+        }
+
+        /// <summary>
+        /// StartUI 이어하기 버튼.
+        /// </summary>
+        public void OnTitleContinueClicked()
+        {
+            ContinueRun();
+        }
+
+        private void ShowStartUI()
+        {
+            UIManager uiManager = UIManager;
+            if (uiManager == null)
+            {
+                Debug.LogError("[GameManager] UIManager가 없습니다.");
+                _isBooting = false;
+                return;
+            }
+
+            uiManager.Show(PublicVariable.Address.StartUIPrefab, uiBase =>
+            {
+                if (uiBase is not StartUI startUI)
+                {
+                    Debug.LogError("[GameManager] StartUI 컴포넌트가 없습니다.");
+                    _isBooting = false;
+                    return;
+                }
+
+                startUI.Setup(_hasSaveData);
+                _isBooting = false;
+            });
+        }
+
+        private void ContinueRun()
+        {
+            if (!StageManager.TryLoadRun())
+            {
+                Debug.LogWarning("[GameManager] 세이브 로드 실패 → 새 게임으로 전환합니다.");
+                _hasSaveData = false;
+                StartNewRunCharacterSetup();
+                return;
+            }
+
+            // TODO: StageMapSaveData 플레이어 스냅샷 복원
+            Debug.Log("[GameManager] 이어하기 → StageUI");
+            StageManager.ShowStageUI();
+        }
+
+        private void StartNewRunCharacterSetup()
+        {
+            ClearPlayerCharacters();
+            ClearInGameStage();
+            SpawnCharacterSelectObjectAsync();
+        }
+
+        private async void SpawnCharacterSelectObjectAsync()
+        {
+            ReleaseCharacterSelectObject();
+
+            GameObject instance = await ResourceManager.InstantiateAsync(
+                PublicVariable.Address.CharacterSelectObjectPrefab);
+
+            if (instance == null)
+            {
+                Debug.LogError(
+                    $"[GameManager] CharacterSelectObject 생성 실패: {PublicVariable.Address.CharacterSelectObjectPrefab}");
+                OpenUnitSetupUIFallback();
+                return;
+            }
+
+            _characterSelectObjectInstance = instance;
+            _characterSelectObject = instance.GetComponent<CharacterSelectObject>();
+            if (_characterSelectObject == null)
+                _characterSelectObject = instance.GetComponentInChildren<CharacterSelectObject>(true);
+
+            if (_characterSelectObject == null)
+            {
+                Debug.LogError("[GameManager] CharacterSelectObject 컴포넌트가 없습니다.");
+                ReleaseCharacterSelectObject();
+                OpenUnitSetupUIFallback();
+                return;
+            }
+
+            _characterSelectObject.OnSetupCompleted -= OnNewRunSetupCompleted;
+            _characterSelectObject.OnSetupCompleted += OnNewRunSetupCompleted;
+            _characterSelectObject.Show();
+        }
+
+        private void OnNewRunSetupCompleted(UnitInfo unitInfo)
+        {
+            if (_characterSelectObject != null)
+                _characterSelectObject.OnSetupCompleted -= OnNewRunSetupCompleted;
+
+            if (_bootUnitSetupUI != null)
+            {
+                _bootUnitSetupUI.OnSetupCompleted -= OnNewRunSetupCompleted;
+                _bootUnitSetupUI = null;
+            }
+
+            ReleaseCharacterSelectObject();
+
+            if (unitInfo == null)
+            {
+                Debug.LogError("[GameManager] 새 런 캐릭터 세팅 결과가 null입니다.");
+                return;
+            }
+
+            StageManager.CreateNewRun();
+            StageManager.ShowStageUI();
+        }
+
+        private void ReleaseCharacterSelectObject()
+        {
+            if (_characterSelectObject != null)
+            {
+                _characterSelectObject.OnSetupCompleted -= OnNewRunSetupCompleted;
+                _characterSelectObject = null;
+            }
+
+            if (_characterSelectObjectInstance == null)
+                return;
+
+            ResourceManager.ReleaseInstance(_characterSelectObjectInstance);
+            _characterSelectObjectInstance = null;
+        }
+
+        private void OpenUnitSetupUIFallback()
+        {
+            UIManager uiManager = UIManager;
+            if (uiManager == null)
+            {
+                Debug.LogError("[GameManager] UIManager가 없습니다.");
+                return;
+            }
+
+            uiManager.Show(PublicVariable.Address.UnitSetupUIPrefab, uiBase =>
+            {
+                if (uiBase is not UnitSetupUI unitSetupUI)
+                {
+                    Debug.LogError("[GameManager] UnitSetupUI 컴포넌트가 없습니다.");
+                    return;
+                }
+
+                _bootUnitSetupUI = unitSetupUI;
+                _bootUnitSetupUI.OnSetupCompleted -= OnNewRunSetupCompleted;
+                _bootUnitSetupUI.OnSetupCompleted += OnNewRunSetupCompleted;
+                _bootUnitSetupUI.BeginSetup();
+            });
         }
 
         public void InGameStart(string stageTid)

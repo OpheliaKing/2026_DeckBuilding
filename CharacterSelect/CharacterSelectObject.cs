@@ -6,8 +6,8 @@ namespace SHIN
 {
     /// <summary>
     /// 캐릭터 선택 화면 로직.
+    /// GameManager가 Addressables 프리팹을 ResourceManager로 생성한 뒤 Show()를 호출한다.
     /// SO 로드 → UIManager로 UnitSetupUI 표시 → 미리보기 콜백으로 모델 갱신.
-    /// 모델은 PrefabPath별 캐시 후 활성/비활성으로 전환한다.
     /// </summary>
     public class CharacterSelectObject : MonoBehaviour
     {
@@ -29,13 +29,11 @@ namespace SHIN
         public CharacterSelectModel CurrentModel => _currentModel;
         public event Action<CharacterSelectData> OnCharacterSelected;
 
-        private void Start()
-        {
-            Show();
-        }
+        /// <summary>캐릭터/무기 세팅 완료 시 (GameManager BootFlow가 구독).</summary>
+        public event Action<UnitInfo> OnSetupCompleted;
 
         /// <summary>
-        /// SO 로드 후 UnitSetupUI를 연다.
+        /// SO 로드 후 UnitSetupUI를 연다. BootFlow에서 호출한다.
         /// </summary>
         public void Show()
         {
@@ -176,6 +174,7 @@ namespace SHIN
             _isShowing = false;
             HideAllCachedModels();
             gameObject.SetActive(false);
+            OnSetupCompleted?.Invoke(unitInfo);
         }
 
         private void UnbindUnitSetupUI()

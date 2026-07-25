@@ -74,6 +74,43 @@ namespace SHIN
             RefreshStageNodeUI();
         }
 
+        /// <summary>
+        /// 세이브 존재 여부. (현재 미구현 — 항상 false)
+        /// </summary>
+        public bool HasSaveData()
+        {
+            return TryLoadSave(out _);
+        }
+
+        /// <summary>
+        /// 세이브에서 맵을 로드한다. 성공 시 true.
+        /// </summary>
+        public bool TryLoadRun()
+        {
+            if (!TryLoadSave(out StageMapSaveData saveData))
+                return false;
+
+            if (saveData?.MapData == null || saveData.MapData.Nodes == null || saveData.MapData.Nodes.Count == 0)
+                return false;
+
+            _mapData = saveData.MapData;
+            _activeBattleNodeId = -1;
+            Debug.Log("[StageManager] 세이브 런을 불러왔습니다.");
+            return true;
+        }
+
+        /// <summary>
+        /// 새 런용 맵을 생성하고 세이브한다. (캐릭터 세팅 완료 후 BootFlow에서 호출)
+        /// </summary>
+        public void CreateNewRun()
+        {
+            _activeBattleNodeId = -1;
+            _stageNodeUI = null;
+            GenerateMap();
+            SaveMapData();
+            Debug.Log("[StageManager] 새 런 맵을 생성했습니다.");
+        }
+
         public void ShowStageUI()
         {
             EnsureMapData();

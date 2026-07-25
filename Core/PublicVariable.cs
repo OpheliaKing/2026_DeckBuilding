@@ -19,6 +19,10 @@ namespace SHIN
             public const string PlayerUIPrefab = "Assets/Addressables/Prefab/UI/PlayerUI.prefab";
             public const string StageNodeUIPrefab = "Assets/Addressables/Prefab/UI/Stage/StageNodeUI.prefab";
             public const string StageNodeObjectUIPrefab = "Assets/Addressables/Prefab/UI/Stage/StageNodeObjectUI.prefab";
+            public const string StartUIPrefab =
+                "Assets/Addressables/Prefab/UI/StartUI.prefab";
+            public const string CharacterSelectObjectPrefab =
+                "Assets/Addressables/Prefab/CharacterSelect/CharacterSelectObject.prefab";
             public const string UnitSetupUIPrefab =
                 "Assets/Addressables/Prefab/UI/CharacterSetup/UnitSetupUI.prefab";
             public const string CharacterSelectUIPrefab =

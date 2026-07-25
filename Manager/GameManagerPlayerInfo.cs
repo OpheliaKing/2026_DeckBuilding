@@ -10,6 +10,14 @@ namespace SHIN
         public IReadOnlyList<UnitInfo> PlayerCharacters => _playerCharacters;
 
         /// <summary>
+        /// 새 런 시작 전 플레이어 목록을 비운다.
+        /// </summary>
+        public void ClearPlayerCharacters()
+        {
+            _playerCharacters.Clear();
+        }
+
+        /// <summary>
         /// 유닛 세팅 UI에서 캐릭터/무기 확정 시 호출.
         /// UnitInfo 생성 → 장비 타입 → 기본 덱 카드 추가.
         /// </summary>
