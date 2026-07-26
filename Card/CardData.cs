@@ -20,6 +20,10 @@ namespace SHIN
         public string Description => _description;
 
         [SerializeField]
+        private CHARACTER_EQUIP_TYPE _cardWeaponType;
+        public CHARACTER_EQUIP_TYPE CardWeaponType => _cardWeaponType;
+
+        [SerializeField]
         private int _cost;
         public int Cost => _cost;
 

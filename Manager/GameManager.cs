@@ -88,9 +88,32 @@ namespace SHIN
                 return;
 
             _isBooting = true;
+            BootFlowAsync();
+        }
+
+        private async void BootFlowAsync()
+        {
+            await InitializeSOIndexesAsync();
+
             _hasSaveData = StageManager.HasSaveData();
             Debug.Log($"[GameManager] BootFlow 세이브 유무: {_hasSaveData}");
+            
             ShowStartUI();
+        }
+
+        /// <summary>
+        /// Boot 시점에 자주 쓰는 SO를 로드하고 조회용 인덱스를 미리 만든다.
+        /// </summary>
+        private async System.Threading.Tasks.Task InitializeSOIndexesAsync()
+        {
+            CardDataSO cardDataSO = await GetSOAsync<CardDataSO>(PublicVariable.Address.CardDataSO);
+            if (cardDataSO == null)
+            {
+                Debug.LogError("[GameManager] CardDataSO 초기화 실패");
+                return;
+            }
+
+            cardDataSO.BuildIndex();
         }
 
         /// <summary>

@@ -38,7 +38,12 @@ namespace SHIN
         NONE,
         COMMON,
         RARE,
-        UNIQUE,
-        LEGENDARY,
+    }
+
+    public enum ITEM_REWARD_TYPE
+    {
+        NONE,
+        BOSS,
+        EVENT,
     }
 }
