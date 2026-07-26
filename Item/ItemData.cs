@@ -26,6 +26,9 @@ namespace SHIN
         [SerializeField]
         private ITEM_GRADE _itemGrade;
         public ITEM_GRADE ItemGrade => _itemGrade;
+        [SerializeField]
+        private ITEM_REWARD_TYPE _itemRewardType;
+        public ITEM_REWARD_TYPE ItemRewardType => _itemRewardType;
 
         /// <summary>ItemEffectDataSO에서 조회할 효과 tid 목록</summary>
         [SerializeField]

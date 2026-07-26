@@ -16,6 +16,12 @@ namespace SHIN
         [NonSerialized]
         private Dictionary<CHARACTER_EQUIP_TYPE, List<CardData>> _cardsByEquipType;
 
+        /// <summary>
+        /// 리워드용: (무기타입, 등급)별 카드 캐시. 공용(NONE)은 무기 키 NONE으로 보관.
+        /// </summary>
+        [NonSerialized]
+        private Dictionary<CHARACTER_EQUIP_TYPE, Dictionary<ITEM_GRADE, List<CardData>>> _rewardCardsByEquipAndGrade;
+
         [NonSerialized]
         private bool _isIndexBuilt;
 
@@ -33,6 +39,12 @@ namespace SHIN
                 _cardsByEquipType = new Dictionary<CHARACTER_EQUIP_TYPE, List<CardData>>();
             else
                 _cardsByEquipType.Clear();
+
+            if (_rewardCardsByEquipAndGrade == null)
+                _rewardCardsByEquipAndGrade =
+                    new Dictionary<CHARACTER_EQUIP_TYPE, Dictionary<ITEM_GRADE, List<CardData>>>();
+            else
+                _rewardCardsByEquipAndGrade.Clear();
 
             if (_cardDatas == null)
             {
@@ -54,10 +66,77 @@ namespace SHIN
                 }
 
                 list.Add(card);
+                AddRewardCardIndex(card);
             }
 
             _isIndexBuilt = true;
             Debug.Log($"[CardDataSO] 인덱스 빌드 완료: 카드 {_cardDatas.Count}장, 타입 {_cardsByEquipType.Count}종");
+        }
+
+        /// <summary>
+        /// 공용(NONE) + 지정 무기에서 해당 등급 카드를 랜덤으로 하나 뽑는다.
+        /// </summary>
+        public bool TryGetRandomRewardCard(
+            CHARACTER_EQUIP_TYPE weaponType,
+            ITEM_GRADE grade,
+            out CardData cardData)
+        {
+            cardData = null;
+            EnsureIndex();
+
+            var pool = new List<CardData>();
+            AppendRewardCardsByGrade(pool, CHARACTER_EQUIP_TYPE.NONE, grade);
+            if (weaponType != CHARACTER_EQUIP_TYPE.NONE)
+                AppendRewardCardsByGrade(pool, weaponType, grade);
+
+            if (pool.Count == 0)
+                return false;
+
+            cardData = pool[UnityEngine.Random.Range(0, pool.Count)];
+            return cardData != null;
+        }
+
+        private void AddRewardCardIndex(CardData card)
+        {
+            CHARACTER_EQUIP_TYPE equipType = card.CardWeaponType;
+            ITEM_GRADE grade = card.CardGrade;
+
+            if (!_rewardCardsByEquipAndGrade.TryGetValue(
+                    equipType,
+                    out Dictionary<ITEM_GRADE, List<CardData>> byGrade))
+            {
+                byGrade = new Dictionary<ITEM_GRADE, List<CardData>>();
+                _rewardCardsByEquipAndGrade[equipType] = byGrade;
+            }
+
+            if (!byGrade.TryGetValue(grade, out List<CardData> list))
+            {
+                list = new List<CardData>();
+                byGrade[grade] = list;
+            }
+
+            list.Add(card);
+        }
+
+        private void AppendRewardCardsByGrade(
+            List<CardData> result,
+            CHARACTER_EQUIP_TYPE equipType,
+            ITEM_GRADE grade)
+        {
+            if (_rewardCardsByEquipAndGrade == null)
+                return;
+
+            if (!_rewardCardsByEquipAndGrade.TryGetValue(equipType, out Dictionary<ITEM_GRADE, List<CardData>> byGrade))
+                return;
+
+            if (!byGrade.TryGetValue(grade, out List<CardData> list) || list == null)
+                return;
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i] != null)
+                    result.Add(list[i]);
+            }
         }
 
         /// <summary>

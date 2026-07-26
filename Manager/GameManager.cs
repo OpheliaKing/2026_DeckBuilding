@@ -108,12 +108,15 @@ namespace SHIN
         {
             CardDataSO cardDataSO = await GetSOAsync<CardDataSO>(PublicVariable.Address.CardDataSO);
             if (cardDataSO == null)
-            {
                 Debug.LogError("[GameManager] CardDataSO 초기화 실패");
-                return;
-            }
+            else
+                cardDataSO.BuildIndex();
 
-            cardDataSO.BuildIndex();
+            ItemDataSO itemDataSO = await GetSOAsync<ItemDataSO>(PublicVariable.Address.ItemDataSO);
+            if (itemDataSO == null)
+                Debug.LogError("[GameManager] ItemDataSO 초기화 실패");
+            else
+                itemDataSO.BuildRewardIndex();
         }
 
         /// <summary>

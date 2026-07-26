@@ -38,6 +38,53 @@ namespace SHIN
         [SerializeField]
         private bool _initializeOnStart = false;
 
+        [Header("Stage Clear Reward")]
+        [SerializeField]
+        private int _rewardOfferCount = 3;
+
+        [Tooltip("카드가 나올 기본 확률. ProgressTables에 값이 있으면 그쪽 우선")]
+        [SerializeField]
+        [Range(0f, 1f)]
+        private float _defaultCardChance = 0.7f;
+
+        [SerializeField]
+        private StageRewardProgressTable[] _rewardProgressTables =
+        {
+            new StageRewardProgressTable
+            {
+                MinProgressStep = 0,
+                MaxProgressStep = 2,
+                CardChance = 0.75f,
+                GradeWeights = new[]
+                {
+                    new RewardGradeWeight { Grade = ITEM_GRADE.COMMON, Weight = 80f },
+                    new RewardGradeWeight { Grade = ITEM_GRADE.RARE, Weight = 20f },
+                }
+            },
+            new StageRewardProgressTable
+            {
+                MinProgressStep = 3,
+                MaxProgressStep = 5,
+                CardChance = 0.65f,
+                GradeWeights = new[]
+                {
+                    new RewardGradeWeight { Grade = ITEM_GRADE.COMMON, Weight = 55f },
+                    new RewardGradeWeight { Grade = ITEM_GRADE.RARE, Weight = 45f },
+                }
+            },
+            new StageRewardProgressTable
+            {
+                MinProgressStep = 6,
+                MaxProgressStep = -1,
+                CardChance = 0.55f,
+                GradeWeights = new[]
+                {
+                    new RewardGradeWeight { Grade = ITEM_GRADE.COMMON, Weight = 35f },
+                    new RewardGradeWeight { Grade = ITEM_GRADE.RARE, Weight = 65f },
+                }
+            },
+        };
+
         #endregion
 
         #region Properties
@@ -193,42 +240,309 @@ namespace SHIN
         private void StartStageClearRewardFlow()
         {
             OnStageCleared();
-            ShowRewardUI();
-
-            // TODO: 리워드 UI에서 선택 완료 시 OnRewardSelected() 호출로 교체
-            // 현재는 리워드 UI가 없어 바로 StageNodeUI로 이동
-            OnRewardSelected();
+            ShowRewardUIAsync();
         }
 
-        /// <summary>
-        /// 스테이지(노드) 클리어 직후 처리.
-        /// </summary>
         private void OnStageCleared()
         {
-            // TODO: 클리어 연출 / 클리어 카운트 / 업적 등
             Debug.Log($"[StageManager] 스테이지 클리어: nodeId={_activeBattleNodeId}");
         }
 
-        /// <summary>
-        /// 리워드 UI 출력.
-        /// </summary>
-        private void ShowRewardUI()
+        private async void ShowRewardUIAsync()
         {
-            // TODO: UIManager.Show로 리워드 UI 프리팹 호출
-            // TODO: 리워드 후보 생성 후 UI에 전달
-            // TODO: 선택 완료 콜백에서 OnRewardSelected() 호출
-            Debug.Log("[StageManager] 리워드 UI 출력 (미구현)");
+            List<StageRewardOffer> offers = await BuildRewardOffersAsync(_rewardOfferCount);
+            if (offers == null || offers.Count == 0)
+            {
+                Debug.LogWarning("[StageManager] 보상 후보가 비어 있어 StageNodeUI로 이동합니다.");
+                OnRewardSelected(null);
+                return;
+            }
+
+            UIManager uiManager = ResolveUIManager();
+            if (uiManager == null)
+            {
+                OnRewardSelected(null);
+                return;
+            }
+
+            uiManager.Show(PublicVariable.Address.StageRewardUIPrefab, uiBase =>
+            {
+                if (uiBase is not StageRewardUI rewardUI)
+                {
+                    Debug.LogError("[StageManager] StageRewardUI 컴포넌트가 없습니다.");
+                    OnRewardSelected(null);
+                    return;
+                }
+
+                rewardUI.Setup(offers, OnRewardSelected);
+            });
+        }
+
+        private async System.Threading.Tasks.Task<List<StageRewardOffer>> BuildRewardOffersAsync(int count)
+        {
+            var result = new List<StageRewardOffer>(count);
+            var usedTids = new HashSet<string>();
+
+            var gameManager = GameManager.Instance;
+            if (gameManager == null)
+                return result;
+
+            CardDataSO cardDataSO = await gameManager.GetSOAsync<CardDataSO>(PublicVariable.Address.CardDataSO);
+            ItemDataSO itemDataSO = await gameManager.GetSOAsync<ItemDataSO>(PublicVariable.Address.ItemDataSO);
+
+            if (cardDataSO != null && !cardDataSO.IsIndexBuilt)
+                cardDataSO.BuildIndex();
+            if (itemDataSO != null && !itemDataSO.IsRewardIndexBuilt)
+                itemDataSO.BuildRewardIndex();
+
+            int progressStep = GetRewardProgressStep();
+            StageRewardProgressTable table = ResolveRewardProgressTable(progressStep);
+            CHARACTER_EQUIP_TYPE weaponType = ResolvePlayerWeaponType();
+
+            const int maxAttemptsPerSlot = 24;
+            for (int i = 0; i < count; i++)
+            {
+                StageRewardOffer offer = null;
+                for (int attempt = 0; attempt < maxAttemptsPerSlot; attempt++)
+                {
+                    offer = RollSingleRewardOffer(table, weaponType, cardDataSO, itemDataSO);
+                    if (offer == null)
+                        continue;
+
+                    if (!string.IsNullOrEmpty(offer.Tid) && usedTids.Contains(offer.Tid))
+                        continue;
+
+                    if (!IsValidRewardCandidate(offer))
+                        continue;
+
+                    break;
+                }
+
+                if (offer == null)
+                {
+                    Debug.LogWarning($"[StageManager] 보상 슬롯 {i} 생성 실패");
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(offer.Tid))
+                    usedTids.Add(offer.Tid);
+
+                result.Add(offer);
+            }
+
+            return result;
+        }
+
+        private StageRewardOffer RollSingleRewardOffer(
+            StageRewardProgressTable table,
+            CHARACTER_EQUIP_TYPE weaponType,
+            CardDataSO cardDataSO,
+            ItemDataSO itemDataSO)
+        {
+            float cardChance = table.CardChance > 0f ? table.CardChance : _defaultCardChance;
+            bool rollCard = UnityEngine.Random.value <= cardChance;
+            ITEM_GRADE grade = RollGrade(table.GradeWeights);
+
+            if (rollCard)
+            {
+                if (cardDataSO != null &&
+                    cardDataSO.TryGetRandomRewardCard(weaponType, grade, out CardData card) &&
+                    card != null)
+                {
+                    return new StageRewardOffer
+                    {
+                        Kind = STAGE_REWARD_KIND.CARD,
+                        Tid = card.Tid,
+                        CardData = card,
+                        Grade = grade,
+                    };
+                }
+
+                // 카드 실패 시 아이템으로 폴백
+            }
+
+            if (itemDataSO != null &&
+                itemDataSO.TryGetRandomRewardItem(grade, out ItemData item) &&
+                item != null)
+            {
+                return new StageRewardOffer
+                {
+                    Kind = STAGE_REWARD_KIND.ITEM,
+                    Tid = item.Tid,
+                    ItemData = item,
+                    Grade = grade,
+                };
+            }
+
+            // 아이템도 실패하면 반대 타입 재시도
+            if (!rollCard &&
+                cardDataSO != null &&
+                cardDataSO.TryGetRandomRewardCard(weaponType, grade, out CardData fallbackCard) &&
+                fallbackCard != null)
+            {
+                return new StageRewardOffer
+                {
+                    Kind = STAGE_REWARD_KIND.CARD,
+                    Tid = fallbackCard.Tid,
+                    CardData = fallbackCard,
+                    Grade = grade,
+                };
+            }
+
+            return null;
         }
 
         /// <summary>
-        /// 리워드 선택 완료 후 StageNodeUI로 이동.
+        /// 보유 아이템/중복 등 필터용. 추후 구현.
         /// </summary>
-        private void OnRewardSelected()
+        private bool IsValidRewardCandidate(StageRewardOffer offer)
         {
-            // TODO: 선택한 리워드(카드/아이템 등)를 플레이어에게 반영
+            if (offer == null)
+                return false;
+
+            // TODO: 보유 중인 유니크 아이템, 금지 카드 등 검증
+            return true;
+        }
+
+        private int GetRewardProgressStep()
+        {
+            if (_mapData?.Nodes == null)
+                return 0;
+
+            int clearedBattles = 0;
+            for (int i = 0; i < _mapData.Nodes.Count; i++)
+            {
+                StageNodeData node = _mapData.Nodes[i];
+                if (node == null || !node.IsVisited)
+                    continue;
+
+                if (node.StageType == STAGE_TYPE.BATTLE_NORMAL ||
+                    node.StageType == STAGE_TYPE.BATTLE_ELITE ||
+                    node.StageType == STAGE_TYPE.BATTLE_BOSS)
+                {
+                    clearedBattles++;
+                }
+            }
+
+            return Mathf.Max(0, clearedBattles - 1);
+        }
+
+        private StageRewardProgressTable ResolveRewardProgressTable(int progressStep)
+        {
+            if (_rewardProgressTables != null)
+            {
+                for (int i = 0; i < _rewardProgressTables.Length; i++)
+                {
+                    StageRewardProgressTable table = _rewardProgressTables[i];
+                    bool minOk = progressStep >= table.MinProgressStep;
+                    bool maxOk = table.MaxProgressStep < 0 || progressStep <= table.MaxProgressStep;
+                    if (minOk && maxOk)
+                        return table;
+                }
+            }
+
+            return new StageRewardProgressTable
+            {
+                MinProgressStep = 0,
+                MaxProgressStep = -1,
+                CardChance = _defaultCardChance,
+                GradeWeights = new[]
+                {
+                    new RewardGradeWeight { Grade = ITEM_GRADE.COMMON, Weight = 70f },
+                    new RewardGradeWeight { Grade = ITEM_GRADE.RARE, Weight = 30f },
+                }
+            };
+        }
+
+        private static ITEM_GRADE RollGrade(RewardGradeWeight[] weights)
+        {
+            if (weights == null || weights.Length == 0)
+                return ITEM_GRADE.COMMON;
+
+            float total = 0f;
+            for (int i = 0; i < weights.Length; i++)
+            {
+                if (weights[i].Weight > 0f)
+                    total += weights[i].Weight;
+            }
+
+            if (total <= 0f)
+                return weights[0].Grade;
+
+            float roll = UnityEngine.Random.Range(0f, total);
+            float cursor = 0f;
+            for (int i = 0; i < weights.Length; i++)
+            {
+                if (weights[i].Weight <= 0f)
+                    continue;
+
+                cursor += weights[i].Weight;
+                if (roll <= cursor)
+                    return weights[i].Grade;
+            }
+
+            return weights[weights.Length - 1].Grade;
+        }
+
+        private static CHARACTER_EQUIP_TYPE ResolvePlayerWeaponType()
+        {
+            var players = GameManager.Instance?.PlayerCharacters;
+            if (players == null || players.Count == 0 || players[0] == null)
+                return CHARACTER_EQUIP_TYPE.NONE;
+
+            return players[0].EquipType;
+        }
+
+        /// <summary>
+        /// 리워드 선택 완료 후 플레이어에 반영하고 StageNodeUI로 이동.
+        /// </summary>
+        private void OnRewardSelected(StageRewardOffer selected)
+        {
+            if (selected != null)
+                ApplySelectedReward(selected);
+
+            var uiManager = ResolveUIManager();
+            if (uiManager != null && uiManager.Current is StageRewardUI)
+                uiManager.Close();
 
             _activeBattleNodeId = -1;
             ReturnToStageNodeUI();
+        }
+
+        private void ApplySelectedReward(StageRewardOffer selected)
+        {
+            var gameManager = GameManager.Instance;
+            if (gameManager == null)
+            {
+                Debug.LogError("[StageManager] GameManager가 없습니다.");
+                return;
+            }
+
+            var players = gameManager.PlayerCharacters;
+            if (players == null || players.Count == 0 || players[0] == null)
+            {
+                Debug.LogError("[StageManager] 플레이어 캐릭터가 없습니다.");
+                return;
+            }
+
+            UnitInfo player = players[0];
+
+            switch (selected.Kind)
+            {
+                case STAGE_REWARD_KIND.CARD:
+                    if (!string.IsNullOrEmpty(selected.Tid))
+                        gameManager.AddCard(player, selected.Tid);
+                    break;
+
+                case STAGE_REWARD_KIND.ITEM:
+                    if (selected.ItemData != null)
+                        player.AddItem(selected.ItemData);
+                    else if (!string.IsNullOrEmpty(selected.Tid))
+                        player.AddItem(selected.Tid);
+                    break;
+            }
+
+            Debug.Log($"[StageManager] 보상 적용: {selected.Kind} / {selected.Tid}");
         }
 
         #endregion

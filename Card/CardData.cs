@@ -32,6 +32,10 @@ namespace SHIN
         public CARD_TYPE CardType => _cardType;
 
         [SerializeField]
+        private ITEM_GRADE _cardGrade;
+        public ITEM_GRADE CardGrade => _cardGrade;
+
+        [SerializeField]
         private string _animationName;
         public string AnimationName => _animationName;
 
