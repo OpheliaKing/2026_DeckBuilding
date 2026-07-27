@@ -165,7 +165,16 @@ namespace SHIN
                     _playerCharacters.Add(character);
                     if (unitInfo.UnitType == UNIT_TYPE.NONE)
                         unitInfo.SetUnitType(UNIT_TYPE.PLAYER);
-                    character.InitCharacter(unitInfo);
+
+                    // 런 영속 UnitInfo는 그대로 두고, 전투용 복사본만 인게임에 전달
+                    UnitInfo combatUnitInfo = unitInfo.CloneForCombat();
+                    if (combatUnitInfo == null)
+                    {
+                        Debug.LogError($"[InGameManager] 전투용 UnitInfo 복사 실패: {unitData.unitTid}");
+                        continue;
+                    }
+
+                    character.InitCharacter(combatUnitInfo);
                     character.SetAIType(CHARACTER_AI_TYPE.PLAYER);
                 }
             }

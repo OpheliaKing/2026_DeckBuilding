@@ -17,6 +17,13 @@ namespace SHIN
         private UNIT_TYPE _unitType = UNIT_TYPE.NONE;
         public UNIT_TYPE UnitType => _unitType;
 
+        /// <summary>
+        /// 전투용 복사본이 가리키는 런 영속 UnitInfo. 런 원본이면 null.
+        /// </summary>
+        private UnitInfo _runSourceUnitInfo;
+        public UnitInfo RunSourceUnitInfo => _runSourceUnitInfo;
+        public bool IsCombatClone => _runSourceUnitInfo != null;
+
         public void SetUnitType(UNIT_TYPE unitType)
         {
             _unitType = unitType;
@@ -337,6 +344,11 @@ namespace SHIN
             }
         }
 
+        public void ClearBuffs()
+        {
+            _activeBuffs.Clear();
+        }
+
         private float GetBuffValueSum(CARD_BUFF_EFFECT_TYPE effectType)
         {
             float sum = 0f;
@@ -367,6 +379,66 @@ namespace SHIN
 
             _currentHp = MaxHp;
             RefillCardCost();
+        }
+
+        /// <summary>
+        /// 런 영속 데이터를 전투용으로 복사한다.
+        /// 마스터 덱/아이템/장비/체력은 복사하고, 버프·손패 등 전투 전용 상태는 비운다.
+        /// </summary>
+        public UnitInfo CloneForCombat()
+        {
+            if (_unitData == null)
+            {
+                Debug.LogError("[UnitInfo] CloneForCombat: UnitData가 null입니다.");
+                return null;
+            }
+
+            var clone = new UnitInfo(_unitData);
+            clone._runSourceUnitInfo = _runSourceUnitInfo != null ? _runSourceUnitInfo : this;
+            clone._unitType = _unitType;
+            clone._equipType = _equipType;
+            clone._drawCardCount = _drawCardCount;
+            clone._itemDataSO = _itemDataSO;
+            clone._itemEffectDataSO = _itemEffectDataSO;
+
+            clone._items.Clear();
+            for (int i = 0; i < _items.Count; i++)
+            {
+                if (_items[i] != null)
+                    clone._items.Add(_items[i]);
+            }
+
+            clone.RebuildActiveItemEffects();
+
+            clone._deckCardList.Clear();
+            for (int i = 0; i < _deckCardList.Count; i++)
+            {
+                if (_deckCardList[i] != null)
+                    clone._deckCardList.Add(_deckCardList[i]);
+            }
+
+            clone.ClearCombatDeck();
+            clone.ClearBuffs();
+            clone.SetCurrentHp(_currentHp);
+            clone.RefillCardCost();
+            return clone;
+        }
+
+        /// <summary>
+        /// 전투 종료 시 복사본 체력을 런 영속 UnitInfo에 반영한다.
+        /// </summary>
+        public void SyncHpToRunSource()
+        {
+            if (_runSourceUnitInfo == null)
+                return;
+
+            _runSourceUnitInfo.SetCurrentHp(_currentHp);
+        }
+
+        public void SetCurrentHp(int hp)
+        {
+            int maxHp = MaxHp;
+            _currentHp = Mathf.Clamp(hp, 0, Mathf.Max(0, maxHp));
         }
 
         /// <summary>

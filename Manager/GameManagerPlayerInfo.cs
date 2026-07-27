@@ -9,6 +9,8 @@ namespace SHIN
         private List<UnitInfo> _playerCharacters = new List<UnitInfo>();
         public IReadOnlyList<UnitInfo> PlayerCharacters => _playerCharacters;
 
+        private int _playerGold;
+
         /// <summary>
         /// 새 런 시작 전 플레이어 목록을 비운다.
         /// </summary>

@@ -969,8 +969,24 @@ namespace SHIN
             ClearCardSelection();
             PlayerUI?.SetInteractable(false);
             FireItemEffects(ITEM_EFFECT_TIMING.BATTLE_END);
+            SyncPlayerCombatHpToRunData();
 
             GameManager.Instance?.StageManager?.OnBattleFinished(isVictory);
+        }
+
+        /// <summary>
+        /// 전투용 UnitInfo 체력을 GameManager 런 영속 UnitInfo에 반영한다.
+        /// </summary>
+        private void SyncPlayerCombatHpToRunData()
+        {
+            for (int i = 0; i < _playerCharacters.Count; i++)
+            {
+                CharacterBase character = _playerCharacters[i];
+                if (character?.UnitInfo == null)
+                    continue;
+
+                character.UnitInfo.SyncHpToRunSource();
+            }
         }
 
         /// <summary>
