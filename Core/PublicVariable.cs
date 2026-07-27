@@ -11,6 +11,7 @@ namespace SHIN
             public const string UnitDataSO = "Assets/Addressables/SO/UnitDataSO.asset";
             public const string CardDataSO = "Assets/Addressables/SO/CardDataSO.asset";
             public const string ItemDataSO = "Assets/Addressables/SO/ItemDataSO.asset";
+            public const string StageEventDataSO = "Assets/Addressables/SO/StageEventDataSO.asset";
             public const string ItemEffectDataSO = "Assets/Addressables/SO/ItemEffectDataSO.asset";
             public const string InGameCombatEventSO = "Assets/Addressables/SO/InGameCombatEventSO.asset";
             public const string CharacterSelectDataSO = "Assets/Addressables/SO/CharacterSelectDataSO.asset";
