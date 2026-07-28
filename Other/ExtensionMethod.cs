@@ -22,7 +22,7 @@ namespace SHIN
                 case STAGE_TYPE.SHOP:
                     return "Pictoicon_Store";
                 case STAGE_TYPE.EVENT:
-                    return "Pictoicon_Chest_0";
+                    return "Pictoicon_Alert";
                 default:
                     return "None";
             }

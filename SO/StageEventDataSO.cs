@@ -23,7 +23,17 @@ namespace SHIN
             return _eventDatas[index];
         }
 
-        
+        public StageEventData GetRandomEventData()
+        {
+            if (_eventDatas == null || _eventDatas.Count == 0)
+            {
+                Debug.LogError("[StageEventDataSO] 이벤트 데이터가 비어 있습니다.");
+                return null;
+            }
+
+            int index = UnityEngine.Random.Range(0, _eventDatas.Count);
+            return _eventDatas[index];
+        }
 
         public StageEventData GetEventData(string eventTid)
         {

@@ -36,6 +36,10 @@ namespace SHIN
                 "Assets/Addressables/Prefab/UI/StageReward/StageRewardUI.prefab";
             public const string StageRewardObjectPrefab =
                 "Assets/Addressables/Prefab/UI/StageReward/StageRewardObject.prefab";
+            public const string StageEventUIPrefab =
+                "Assets/Addressables/Prefab/UI/StageEvent/StageEventUI.prefab";
+            public const string StageEventUIButtonPrefab =
+                "Assets/Addressables/Prefab/UI/StageEvent/StageEventUIButton.prefab";
             public const string UIAtlas = "Assets/Addressables/Atlas/UIAtlas.spriteatlasv2";
             public const string PlayerAnimatorSword =
                 "Assets/Addressables/Animator/Player/PlayerAnimator_Sword.controller";

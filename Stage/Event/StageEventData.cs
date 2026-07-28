@@ -41,6 +41,9 @@ namespace SHIN
         /// <summary>0~1. 선택 시 이 효과가 발동할 독립 확률.</summary>
         [Range(0f, 1f)]
         public float Probability;
+
+        public int Priority;
+        public string EventTextString;
     }
 
     public enum STAGE_EVENT_RESULT_TYPE

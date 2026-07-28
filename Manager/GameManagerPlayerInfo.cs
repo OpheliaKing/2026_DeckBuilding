@@ -10,6 +10,27 @@ namespace SHIN
         public IReadOnlyList<UnitInfo> PlayerCharacters => _playerCharacters;
 
         private int _playerGold;
+        public int PlayerGold => _playerGold;
+
+        public void AddGold(int amount)
+        {
+            if (amount == 0)
+                return;
+
+            _playerGold = Mathf.Max(0, _playerGold + amount);
+        }
+
+        public bool TrySpendGold(int amount)
+        {
+            if (amount <= 0)
+                return true;
+
+            if (_playerGold < amount)
+                return false;
+
+            _playerGold -= amount;
+            return true;
+        }
 
         /// <summary>
         /// 새 런 시작 전 플레이어 목록을 비운다.

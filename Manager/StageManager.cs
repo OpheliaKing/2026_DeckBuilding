@@ -6,7 +6,7 @@ namespace SHIN
     /// <summary>
     /// 스테이지 맵 데이터 생성·보관·세이브/로드 및 UI 갱신 요청.
     /// </summary>
-    public class StageManager : ManagerBase
+    public partial class StageManager : ManagerBase
     {
         #region Constants
 
@@ -559,8 +559,10 @@ namespace SHIN
                     EnterBattle(node);
                     break;
                 case STAGE_TYPE.SHOP:
-                case STAGE_TYPE.EVENT:
                     Debug.Log($"[StageManager] 미구현 노드 타입: {node.StageType}");
+                    break;
+                case STAGE_TYPE.EVENT:
+                    EnterEvent(node);
                     break;
                 default:
                     Debug.LogWarning($"[StageManager] 처리할 수 없는 노드 타입: {node.StageType}");
