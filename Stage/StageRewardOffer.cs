@@ -44,6 +44,17 @@ namespace SHIN
     }
 
     /// <summary>
+    /// 상점에 진열되는 판매 항목 1개.
+    /// </summary>
+    [Serializable]
+    public class StageShopOffer
+    {
+        public StageRewardOffer Reward;
+        public int Price;
+        public bool IsSoldOut;
+    }
+
+    /// <summary>
     /// 등급별 가중치. Inspector에서 확률 튜닝용.
     /// </summary>
     [Serializable]

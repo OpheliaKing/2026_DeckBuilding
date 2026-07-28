@@ -36,7 +36,11 @@ namespace SHIN
         private void Awake()
         {
             if (_cardRoot == null)
-                _cardRoot = transform;
+            {
+                Transform cardLayer = transform.Find("CardLayer");
+                if (cardLayer != null)
+                    _cardRoot = cardLayer;
+            }
 
             EnsureUiClickable();
         }
@@ -73,6 +77,11 @@ namespace SHIN
 
             if (_itemLayer != null)
                 _itemLayer.gameObject.SetActive(isItem);
+
+            // 카드/아이템 레이어를 배타적으로 노출한다.
+            // _cardRoot가 루트(transform)로 폴백된 경우 오브젝트 전체 비활성화를 피한다.
+            if (_cardRoot != null)
+                _cardRoot.gameObject.SetActive(isCard);
 
             if (isItem && _offer.ItemData != null)
             {
@@ -128,13 +137,12 @@ namespace SHIN
                 return false;
             }
 
-            if (_cardRoot == null)
-                _cardRoot = transform;
+            Transform spawnRoot = _cardRoot != null ? _cardRoot : transform;
 
             _isCardLoading = true;
             GameObject instance = await resourceManager.InstantiateAsync(
                 PublicVariable.Address.CardObjectPrefab,
-                _cardRoot);
+                spawnRoot);
             _isCardLoading = false;
 
             if (_cardObj != null)

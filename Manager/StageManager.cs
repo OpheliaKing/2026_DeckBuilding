@@ -559,7 +559,7 @@ namespace SHIN
                     EnterBattle(node);
                     break;
                 case STAGE_TYPE.SHOP:
-                    Debug.Log($"[StageManager] 미구현 노드 타입: {node.StageType}");
+                    EnterShop(node);
                     break;
                 case STAGE_TYPE.EVENT:
                     EnterEvent(node);
