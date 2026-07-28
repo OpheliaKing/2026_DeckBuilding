@@ -12,6 +12,7 @@ namespace SHIN
         private bool _isWaitingForTarget;
         private bool _isResolvingCard;
         private bool _isBattleEnded;
+        private int _pendingDeathRoutines;
         private CardResolveSession _resolveSession;
 
         public CardData SelectedCard => _selectedCard;
@@ -866,8 +867,8 @@ namespace SHIN
             if (isPlayerUnit)
             {
                 // 부활 대비: 리스트 유지, 콜라이더/오브젝트 유지
-                StartCoroutine(ProcessDeathRoutine(character));
-                CheckBattleEnd();
+                // 전투 종료(StageRewardUI)는 사망 연출 종료 후에만 판정
+                StartCoroutine(ProcessDeathRoutineAndCheckBattleEnd(character));
                 return;
             }
 
@@ -882,8 +883,18 @@ namespace SHIN
             for (int i = 0; i < cols2d.Length; i++)
                 cols2d[i].enabled = false;
 
-            StartCoroutine(ProcessDeathRoutine(character));
-            CheckBattleEnd();
+            // 사망 판정(HP/턴 제거)은 즉시, 전투 종료 UI는 디졸브 종료 후
+            StartCoroutine(ProcessDeathRoutineAndCheckBattleEnd(character));
+        }
+
+        private IEnumerator ProcessDeathRoutineAndCheckBattleEnd(CharacterBase character)
+        {
+            _pendingDeathRoutines++;
+            yield return ProcessDeathRoutine(character);
+            _pendingDeathRoutines = Mathf.Max(0, _pendingDeathRoutines - 1);
+
+            if (_pendingDeathRoutines <= 0)
+                CheckBattleEnd();
         }
 
         private IEnumerator ProcessDeathRoutine(CharacterBase character)
@@ -921,6 +932,10 @@ namespace SHIN
         private void CheckBattleEnd()
         {
             if (_isBattleEnded)
+                return;
+
+            // 진행 중인 사망 연출이 있으면 StageRewardUI 등 종료 플로우를 미룬다.
+            if (_pendingDeathRoutines > 0)
                 return;
 
             bool anyPlayerAlive = false;
