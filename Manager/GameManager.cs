@@ -164,6 +164,24 @@ namespace SHIN
             });
         }
 
+        /// <summary>
+        /// 엔딩 시퀀스 종료 후 런 진행을 초기화하고 타이틀로 복귀한다.
+        /// </summary>
+        public void ReturnToTitleAfterEnding()
+        {
+            ClearPlayerCharacters();
+            _playerGold = 0;
+            _hasSaveData = false;
+            ClearInGameStage();
+
+            UIManager uiManager = UIManager;
+            if (uiManager != null)
+                uiManager.CloseAll();
+
+            Debug.Log("[GameManager] 엔딩 종료 → 타이틀(StartUI) 복귀, 세이브 초기화");
+            ShowStartUI();
+        }
+
         private void ContinueRun()
         {
             if (!StageManager.TryLoadRun())

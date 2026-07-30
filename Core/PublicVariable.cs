@@ -13,6 +13,7 @@ namespace SHIN
             public const string CardDataSO = "Assets/Addressables/SO/CardDataSO.asset";
             public const string ItemDataSO = "Assets/Addressables/SO/ItemDataSO.asset";
             public const string StageEventDataSO = "Assets/Addressables/SO/StageEventDataSO.asset";
+            public const string EndingSequenceSO = "Assets/Addressables/SO/EndingSequenceSO.asset";
             public const string ItemEffectDataSO = "Assets/Addressables/SO/ItemEffectDataSO.asset";
             public const string InGameCombatEventSO = "Assets/Addressables/SO/InGameCombatEventSO.asset";
             public const string CharacterSelectDataSO = "Assets/Addressables/SO/CharacterSelectDataSO.asset";
@@ -45,6 +46,8 @@ namespace SHIN
                 "Assets/Addressables/Prefab/UI/StageShop/StageShopUI.prefab";
             public const string StageShopUIObjectPrefab =
                 "Assets/Addressables/Prefab/UI/StageShop/StageShopUIObject.prefab";
+            public const string EndingSequenceUIPrefab =
+                "Assets/Addressables/Prefab/UI/EndingSequenceUI.prefab";
             public const string UIAtlas = "Assets/Addressables/Atlas/UIAtlas.spriteatlasv2";
             public const string PlayerAnimatorSword =
                 "Assets/Addressables/Animator/Player/PlayerAnimator_Sword.controller";

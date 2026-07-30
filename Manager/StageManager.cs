@@ -11,7 +11,7 @@ namespace SHIN
         #region Constants
 
         private const int GridX = 5;
-        private const int GridY = 8;
+        private const int GridY = 3;
         private const int MaxNodesPerFloor = 3;
         private const int MinNodesPerFloor = 3;
         private const int MinStartNodes = 2;
@@ -256,6 +256,7 @@ namespace SHIN
 
         /// <summary>
         /// 인게임 전투 종료 후 호출. 승리 시 클리어→리워드→StageNodeUI 플로우로 이어진다.
+        /// 마지막 스텝 보스 클리어 시에는 리워드 대신 엔딩 이벤트를 실행한다.
         /// </summary>
         public void OnBattleFinished(bool isVictory)
         {
@@ -263,8 +264,23 @@ namespace SHIN
 
             if (isVictory && _activeBattleNodeId >= 0)
             {
+                StageNodeData clearedNode = FindNode(_activeBattleNodeId);
+                bool isFinalBossClear =
+                    clearedNode != null &&
+                    clearedNode.StageType == STAGE_TYPE.BATTLE_BOSS &&
+                    IsFinalStep();
+
                 ApplyNodeCleared(_activeBattleNodeId);
                 SaveMapData();
+
+                if (isFinalBossClear)
+                {
+                    int clearedNodeId = _activeBattleNodeId;
+                    _activeBattleNodeId = -1;
+                    PlayEndingEvent(clearedNodeId);
+                    return;
+                }
+
                 StartStageClearRewardFlow();
                 return;
             }
@@ -274,6 +290,97 @@ namespace SHIN
 
             _activeBattleNodeId = -1;
             ReturnToStageNodeUI();
+        }
+
+        /// <summary>
+        /// 마지막 스텝 보스 처치 후 엔딩 이벤트.
+        /// </summary>
+        private async void PlayEndingEvent(int clearedBossNodeId)
+        {
+            Debug.Log(
+                $"[StageManager] 엔딩 / Step={_currentStepIndex}, BossNodeId={clearedBossNodeId}");
+
+            var gameManager = GameManager.Instance;
+            if (gameManager == null)
+            {
+                Debug.LogError("[StageManager] GameManager가 없습니다.");
+                return;
+            }
+
+            string unitTid = null;
+            var players = gameManager.PlayerCharacters;
+            if (players != null && players.Count > 0 && players[0]?.UnitData != null)
+                unitTid = players[0].UnitData.unitTid;
+
+            EndingSequenceSO endingSO =
+                await gameManager.GetSOAsync<EndingSequenceSO>(PublicVariable.Address.EndingSequenceSO);
+
+            EndingSequenceData sequenceData = null;
+            if (endingSO != null && !string.IsNullOrEmpty(unitTid))
+                endingSO.TryGetEndingSequence(unitTid, out sequenceData);
+
+            if (sequenceData == null && endingSO != null && endingSO.Count > 0)
+            {
+                sequenceData = endingSO.GetEndingSequence(0);
+                Debug.LogWarning(
+                    $"[StageManager] unitTid={unitTid} 엔딩이 없어 첫 시퀀스를 사용합니다.");
+            }
+
+            if (sequenceData == null)
+            {
+                Debug.LogError("[StageManager] EndingSequenceData가 없어 엔딩을 건너뜁니다.");
+                FinishEndingAndReturnToTitle();
+                return;
+            }
+
+            UIManager uiManager = ResolveUIManager();
+            if (uiManager == null)
+            {
+                FinishEndingAndReturnToTitle();
+                return;
+            }
+
+            SetStageNodeUIVisible(false);
+            uiManager.Show(PublicVariable.Address.EndingSequenceUIPrefab, uiBase =>
+            {
+                if (uiBase is not EndingSequenceUI endingUI)
+                {
+                    Debug.LogError("[StageManager] EndingSequenceUI 컴포넌트가 없습니다.");
+                    FinishEndingAndReturnToTitle();
+                    return;
+                }
+
+                endingUI.ShowEndingSequence(sequenceData, FinishEndingAndReturnToTitle);
+            });
+        }
+
+        /// <summary>
+        /// 엔딩 종료: 세이브/런 데이터 초기화 후 타이틀(StartUI)로 복귀.
+        /// </summary>
+        private void FinishEndingAndReturnToTitle()
+        {
+            ClearRunSaveData();
+
+            var gameManager = GameManager.Instance;
+            if (gameManager == null)
+                return;
+
+            gameManager.ReturnToTitleAfterEnding();
+        }
+
+        /// <summary>
+        /// 런 세이브/맵 진행 데이터를 초기화한다.
+        /// </summary>
+        public void ClearRunSaveData()
+        {
+            _mapData = null;
+            _activeBattleNodeId = -1;
+            _currentStepIndex = DefaultStartStepIndex;
+            _stageNodeUI = null;
+            ClearInternalMap();
+
+            // TODO: 로컬 세이브 파일 삭제
+            Debug.Log("[StageManager] 세이브/맵 데이터를 초기화했습니다.");
         }
 
         #endregion
