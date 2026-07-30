@@ -8,6 +8,7 @@ namespace SHIN
         public static class Address
         {
             public const string StageDataSO = "Assets/Addressables/SO/StageDataSO.asset";
+            public const string StageStepDataSO = "Assets/Addressables/SO/StageStepDataSO.asset";
             public const string UnitDataSO = "Assets/Addressables/SO/UnitDataSO.asset";
             public const string CardDataSO = "Assets/Addressables/SO/CardDataSO.asset";
             public const string ItemDataSO = "Assets/Addressables/SO/ItemDataSO.asset";

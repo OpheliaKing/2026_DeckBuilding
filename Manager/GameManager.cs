@@ -117,6 +117,11 @@ namespace SHIN
                 Debug.LogError("[GameManager] ItemDataSO 초기화 실패");
             else
                 itemDataSO.BuildRewardIndex();
+
+            StageStepDataSO stageStepDataSO =
+                await GetSOAsync<StageStepDataSO>(PublicVariable.Address.StageStepDataSO);
+            if (stageStepDataSO == null)
+                Debug.LogError("[GameManager] StageStepDataSO 초기화 실패");
         }
 
         /// <summary>

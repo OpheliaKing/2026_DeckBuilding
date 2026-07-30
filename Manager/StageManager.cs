@@ -25,8 +25,9 @@ namespace SHIN
         private const int MaxShopCount = 2;
         private const int MaxEventCount = 4;
 
-        // TODO: 타입별 스테이지 풀로 교체
+        // TODO: 타입별 스테이지 풀로 교체 — StageStepDataSO 풀이 비어 있을 때만 사용
         private const string DefaultBattleStageTid = "stage_0001";
+        private const int DefaultStartStepIndex = 1;
 
         #endregion
 
@@ -90,6 +91,7 @@ namespace SHIN
         #region Properties
 
         public StageMapData MapData => _mapData;
+        public int CurrentStepIndex => _currentStepIndex;
 
         #endregion
 
@@ -99,6 +101,7 @@ namespace SHIN
         private readonly List<MapNode> _allNodes = new();
         private readonly List<MapNode>[] _nodesByFloor = new List<MapNode>[GridY];
         private int _activeBattleNodeId = -1;
+        private int _currentStepIndex = DefaultStartStepIndex;
 
         #endregion
 
@@ -141,8 +144,9 @@ namespace SHIN
                 return false;
 
             _mapData = saveData.MapData;
+            _currentStepIndex = Mathf.Max(DefaultStartStepIndex, _mapData.StepIndex);
             _activeBattleNodeId = -1;
-            Debug.Log("[StageManager] 세이브 런을 불러왔습니다.");
+            Debug.Log($"[StageManager] 세이브 런을 불러왔습니다. Step={_currentStepIndex}");
             return true;
         }
 
@@ -153,9 +157,52 @@ namespace SHIN
         {
             _activeBattleNodeId = -1;
             _stageNodeUI = null;
+            _currentStepIndex = DefaultStartStepIndex;
             GenerateMap();
             SaveMapData();
-            Debug.Log("[StageManager] 새 런 맵을 생성했습니다.");
+            Debug.Log($"[StageManager] 새 런 맵을 생성했습니다. Step={_currentStepIndex}");
+        }
+
+        /// <summary>
+        /// 다음 스테이지(스텝) 맵을 생성한다. GridY 보스 클리어 후 호출 예정.
+        /// </summary>
+        public bool TryAdvanceToNextStep()
+        {
+            int nextStep = _currentStepIndex + 1;
+            if (!CanEnterStep(nextStep))
+            {
+                Debug.Log($"[StageManager] 다음 스텝 없음 또는 최종 스텝 도달: current={_currentStepIndex}");
+                return false;
+            }
+
+            _currentStepIndex = nextStep;
+            _activeBattleNodeId = -1;
+            GenerateMap();
+            SaveMapData();
+            Debug.Log($"[StageManager] 다음 스텝 맵 생성: Step={_currentStepIndex}");
+            return true;
+        }
+
+        public bool IsFinalStep()
+        {
+            if (TryGetStageStepDataSO(out StageStepDataSO stepSO) && stepSO.MaxStepIndex > 0)
+                return _currentStepIndex >= stepSO.MaxStepIndex;
+
+            return false;
+        }
+
+        private bool CanEnterStep(int stepIndex)
+        {
+            if (stepIndex < DefaultStartStepIndex)
+                return false;
+
+            if (!TryGetStageStepDataSO(out StageStepDataSO stepSO) || stepSO == null)
+                return true;
+
+            if (stepSO.MaxStepIndex <= 0)
+                return true;
+
+            return stepIndex <= stepSO.MaxStepIndex;
         }
 
         public void ShowStageUI()
@@ -595,7 +642,7 @@ namespace SHIN
             if (!string.IsNullOrEmpty(node.StageTid))
                 return;
 
-            // 임시: 전투 스테이지 SO가 하나라 기본 tid 사용
+            // 맵 생성 시점 풀 배정이 실패한 노드용 폴백
             node.StageTid = DefaultBattleStageTid;
         }
 
@@ -659,7 +706,8 @@ namespace SHIN
             if (TryLoadSave(out StageMapSaveData saveData))
             {
                 _mapData = saveData.MapData;
-                Debug.Log("[StageManager] 세이브 데이터를 불러왔습니다.");
+                _currentStepIndex = Mathf.Max(DefaultStartStepIndex, _mapData.StepIndex);
+                Debug.Log($"[StageManager] 세이브 데이터를 불러왔습니다. Step={_currentStepIndex}");
                 return;
             }
 
@@ -762,6 +810,7 @@ namespace SHIN
             {
                 GridX = GridX,
                 GridY = GridY,
+                StepIndex = _currentStepIndex,
                 CurrentNodeId = -1
             };
 
@@ -851,8 +900,14 @@ namespace SHIN
             AssignBattleStageTids(mapData);
         }
 
-        private static void AssignBattleStageTids(StageMapData mapData)
+        private void AssignBattleStageTids(StageMapData mapData)
         {
+            if (mapData?.Nodes == null)
+                return;
+
+            int stepIndex = mapData.StepIndex > 0 ? mapData.StepIndex : _currentStepIndex;
+            TryGetStageStepDataSO(out StageStepDataSO stepSO);
+
             for (int i = 0; i < mapData.Nodes.Count; i++)
             {
                 StageNodeData node = mapData.Nodes[i];
@@ -861,11 +916,34 @@ namespace SHIN
                     case STAGE_TYPE.BATTLE_NORMAL:
                     case STAGE_TYPE.BATTLE_ELITE:
                     case STAGE_TYPE.BATTLE_BOSS:
-                        if (string.IsNullOrEmpty(node.StageTid))
-                            node.StageTid = DefaultBattleStageTid;
+                        if (!string.IsNullOrEmpty(node.StageTid))
+                            break;
+
+                        string tid = null;
+                        if (stepSO != null)
+                            tid = stepSO.GetRandomStageTid(stepIndex, node.StageType);
+
+                        if (string.IsNullOrEmpty(tid))
+                        {
+                            Debug.LogWarning(
+                                $"[StageManager] Step={stepIndex}, Type={node.StageType} 풀이 비어 기본 tid 사용");
+                            tid = DefaultBattleStageTid;
+                        }
+
+                        node.StageTid = tid;
                         break;
                 }
             }
+        }
+
+        private static bool TryGetStageStepDataSO(out StageStepDataSO stepSO)
+        {
+            stepSO = null;
+            var gameManager = GameManager.Instance;
+            if (gameManager == null)
+                return false;
+
+            return gameManager.TryGetSO(PublicVariable.Address.StageStepDataSO, out stepSO);
         }
 
         private static STAGE_TYPE PickMiddleStageType(

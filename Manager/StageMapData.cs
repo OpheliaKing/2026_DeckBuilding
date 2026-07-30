@@ -8,6 +8,8 @@ namespace SHIN
     {
         public int GridX;
         public int GridY;
+        /// <summary>현재 진행 중인 스테이지(스텝) 번호. 1부터.</summary>
+        public int StepIndex = 1;
         public int CurrentNodeId = -1;
         public List<StageNodeData> Nodes = new();
     }
