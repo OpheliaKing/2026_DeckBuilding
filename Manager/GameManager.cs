@@ -9,6 +9,7 @@ namespace SHIN
         [SerializeField] private TimeManager _timeManager;
         [SerializeField] private UIManager _uiManager;
         [SerializeField] private StageManager _stageManager;
+        [SerializeField] private SoundManager _soundManager;
 
         private CharacterSelectObject _characterSelectObject;
         private GameObject _characterSelectObjectInstance;
@@ -62,6 +63,15 @@ namespace SHIN
             {
                 ManagerBase.EnsureManager(transform, ref _stageManager);
                 return _stageManager;
+            }
+        }
+
+        public SoundManager SoundManager
+        {
+            get
+            {
+                ManagerBase.EnsureManager(transform, ref _soundManager);
+                return _soundManager;
             }
         }
 
