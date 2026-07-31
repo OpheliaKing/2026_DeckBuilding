@@ -25,6 +25,7 @@ namespace SHIN
             public CharacterBase User;
             public CharacterBase Target;
             public CardData Card;
+            public InGameCardObject PlayedCardObject;
             public int TotalDamage;
             public float[] HitWeights;
             public int[] HitDamages;
@@ -215,10 +216,11 @@ namespace SHIN
 
             var user = CurrentActor;
             var card = _selectedCard;
+            var playedCardObject = _selectedCardObject;
             bool keepBuffCamera = card.CardType == CARD_TYPE.BUFF;
             ClearCardSelection(keepBuffCamera);
 
-            UseCard(user, target, card);
+            UseCard(user, target, card, playedCardObject);
         }
 
         /// <summary>
@@ -318,7 +320,11 @@ namespace SHIN
         /// <summary>
         /// UseCard → 애니 재생(없으면 즉시 효과) → 애니 판정 타이밍에 효과 → 종료 후 소모/사망 처리
         /// </summary>
-        private void UseCard(CharacterBase user, CharacterBase target, CardData card)
+        private void UseCard(
+            CharacterBase user,
+            CharacterBase target,
+            CardData card,
+            InGameCardObject playedCardObject = null)
         {
             if (user == null || target == null || card == null)
             {
@@ -326,10 +332,14 @@ namespace SHIN
                 return;
             }
 
-            StartCoroutine(UseCardRoutine(user, target, card));
+            StartCoroutine(UseCardRoutine(user, target, card, playedCardObject));
         }
 
-        private IEnumerator UseCardRoutine(CharacterBase user, CharacterBase target, CardData card)
+        private IEnumerator UseCardRoutine(
+            CharacterBase user,
+            CharacterBase target,
+            CardData card,
+            InGameCardObject playedCardObject)
         {
             if (_isResolvingCard)
             {
@@ -338,7 +348,7 @@ namespace SHIN
             }
 
             _isResolvingCard = true;
-            _resolveSession = CreateResolveSession(user, target, card);
+            _resolveSession = CreateResolveSession(user, target, card, playedCardObject);
 
             bool hasAnim = !string.IsNullOrEmpty(card.AnimationName) &&
                            user.TryPlayCardAnimation(card.AnimationName);
@@ -378,13 +388,18 @@ namespace SHIN
                 SetBuffTargetCameraActive(false);
         }
 
-        private CardResolveSession CreateResolveSession(CharacterBase user, CharacterBase target, CardData card)
+        private CardResolveSession CreateResolveSession(
+            CharacterBase user,
+            CharacterBase target,
+            CardData card,
+            InGameCardObject playedCardObject)
         {
             var session = new CardResolveSession
             {
                 User = user,
                 Target = target,
                 Card = card,
+                PlayedCardObject = playedCardObject,
             };
 
             if (card.CardType == CARD_TYPE.ATTACK)
@@ -673,7 +688,7 @@ namespace SHIN
                 }
             }
 
-            ConsumePlayedCard(session.User, session.Card);
+            ConsumePlayedCard(session.User, session.Card, session.PlayedCardObject);
 
             if (session.User != null)
             {
@@ -833,7 +848,10 @@ namespace SHIN
             return damage;
         }
 
-        private void ConsumePlayedCard(CharacterBase attacker, CardData card)
+        private void ConsumePlayedCard(
+            CharacterBase attacker,
+            CardData card,
+            InGameCardObject playedCardObject)
         {
             if (attacker?.UnitInfo == null || card == null)
                 return;
@@ -844,8 +862,14 @@ namespace SHIN
                 return;
             }
 
-            if (IsPlayerCharacter(attacker) && PlayerUI != null)
-                PlayerUI.RefreshHand(attacker.UnitInfo.Hand);
+            if (!IsPlayerCharacter(attacker) || PlayerUI == null)
+                return;
+
+            // 전체 리프레시 대신 사용한 카드만 제거하고 나머지가 빈자리를 채움
+            if (playedCardObject != null)
+                PlayerUI.RemoveCardFromHand(playedCardObject);
+            else
+                PlayerUI.RemoveCardFromHand(card);
         }
 
         private void ProcessDeath(CharacterBase character)
