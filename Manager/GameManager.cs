@@ -105,9 +105,13 @@ namespace SHIN
         {
             await InitializeSOIndexesAsync();
 
+            UIManager uiManager = UIManager;
+            if (uiManager != null)
+                await uiManager.PreloadFadeUIAsync();
+
             _hasSaveData = StageManager.HasSaveData();
             Debug.Log($"[GameManager] BootFlow 세이브 유무: {_hasSaveData}");
-            
+
             ShowStartUI();
         }
 
@@ -136,10 +140,18 @@ namespace SHIN
 
         /// <summary>
         /// StartUI 새 게임 버튼.
+        /// 즉시 페이드 커버(알파 1) → 로딩 → 준비되면 페이드인.
         /// </summary>
         public void OnTitleNewGameClicked()
         {
-            StartNewRunCharacterSetup();
+            UIManager uiManager = UIManager;
+            if (uiManager == null)
+            {
+                StartNewRunCharacterSetup();
+                return;
+            }
+
+            uiManager.BeginFadeCover(StartNewRunCharacterSetup);
         }
 
         /// <summary>
@@ -189,6 +201,17 @@ namespace SHIN
                 uiManager.CloseAll();
 
             Debug.Log("[GameManager] 엔딩 종료 → 타이틀(StartUI) 복귀, 세이브 초기화");
+
+            // CloseAll이 Fade를 지울 수 있으므로 타이틀 전에 다시 프리로드
+            PreloadFadeThenShowStartUI();
+        }
+
+        private async void PreloadFadeThenShowStartUI()
+        {
+            UIManager uiManager = UIManager;
+            if (uiManager != null)
+                await uiManager.PreloadFadeUIAsync();
+
             ShowStartUI();
         }
 
@@ -198,7 +221,7 @@ namespace SHIN
             {
                 Debug.LogWarning("[GameManager] 세이브 로드 실패 → 새 게임으로 전환합니다.");
                 _hasSaveData = false;
-                StartNewRunCharacterSetup();
+                OnTitleNewGameClicked();
                 return;
             }
 
@@ -299,13 +322,14 @@ namespace SHIN
                 if (uiBase is not UnitSetupUI unitSetupUI)
                 {
                     Debug.LogError("[GameManager] UnitSetupUI 컴포넌트가 없습니다.");
+                    uiManager.SignalContentReady();
                     return;
                 }
 
                 _bootUnitSetupUI = unitSetupUI;
                 _bootUnitSetupUI.OnSetupCompleted -= OnNewRunSetupCompleted;
                 _bootUnitSetupUI.OnSetupCompleted += OnNewRunSetupCompleted;
-                _bootUnitSetupUI.BeginSetup();
+                _bootUnitSetupUI.BeginSetup(onContentReady: () => uiManager.SignalContentReady());
             });
         }
 
@@ -316,6 +340,7 @@ namespace SHIN
                 if (stageDataSO == null)
                 {
                     Debug.LogError("[GameManager] StageDataSO 로드 실패");
+                    UIManager?.SignalContentReady();
                     return;
                 }
 
@@ -323,12 +348,14 @@ namespace SHIN
                 if (stageData == null)
                 {
                     Debug.LogError($"[GameManager] StageData 로드 실패: {stageTid}");
+                    UIManager?.SignalContentReady();
                     return;
                 }
 
                 if (string.IsNullOrEmpty(stageData.stagePrefabPath))
                 {
                     Debug.LogError($"[GameManager] stagePrefabPath가 비어 있습니다: {stageTid}");
+                    UIManager?.SignalContentReady();
                     return;
                 }
 
@@ -353,6 +380,7 @@ namespace SHIN
                 if (stageObject == null)
                 {
                     Debug.LogError($"[GameManager] 스테이지 프리팹 생성 실패: {stageData.stagePrefabPath}");
+                    UIManager?.SignalContentReady();
                     return;
                 }
 

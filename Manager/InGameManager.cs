@@ -45,6 +45,7 @@ namespace SHIN
             if (characterInitializeTask.IsFaulted)
             {
                 Debug.LogException(characterInitializeTask.Exception);
+                GameManager.Instance?.UIManager?.SignalContentReady();
                 yield break;
             }
 
@@ -311,6 +312,10 @@ namespace SHIN
             await EnsurePlayerUIAsync();
             InitCombatDecks();
             InitTurnSystem();
+
+            // 캐릭터·PlayerUI·턴 준비 완료 후 페이드인 (첫 턴 진행 전)
+            GameManager.Instance?.UIManager?.SignalContentReady();
+
             await BattleStartTimingAsync();
             StartNextTurn();
         }
@@ -320,10 +325,10 @@ namespace SHIN
             if (_playerUI != null)
                 return;
 
-            var canvas = FindObjectOfType<Canvas>();
-            if (canvas == null)
+            Transform uiRoot = GameManager.Instance?.UIManager?.UIRoot;
+            if (uiRoot == null)
             {
-                Debug.LogError("[InGameManager] Canvas를 찾을 수 없어 PlayerUI를 생성할 수 없습니다.");
+                Debug.LogError("[InGameManager] UI Root(Canvas)를 찾을 수 없어 PlayerUI를 생성할 수 없습니다.");
                 return;
             }
 
@@ -336,7 +341,7 @@ namespace SHIN
 
             var playerUIObject = await resourceManager.InstantiateAsync(
                 PublicVariable.Address.PlayerUIPrefab,
-                canvas.transform);
+                uiRoot);
 
             if (playerUIObject == null)
             {
@@ -354,7 +359,23 @@ namespace SHIN
                 Debug.LogError("[InGameManager] PlayerUI 프리팹에 InGamePlayerUI가 없습니다.");
                 resourceManager.ReleaseInstance(playerUIObject);
                 _playerUIObject = null;
+                return;
             }
+
+            // 플레이어 턴이 될 때까지 숨김
+            _playerUI.SetVisible(false);
+        }
+
+        private void SetPlayerUIVisible(bool visible)
+        {
+            if (_playerUI != null)
+            {
+                _playerUI.SetVisible(visible);
+                return;
+            }
+
+            if (_playerUIObject != null)
+                _playerUIObject.SetActive(visible);
         }
 
         private void ReleasePlayerUI()

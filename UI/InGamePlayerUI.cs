@@ -420,6 +420,11 @@ namespace SHIN
             }
         }
 
+        public void SetVisible(bool visible)
+        {
+            gameObject.SetActive(visible);
+        }
+
         private void OnDestroy()
         {
             _refreshVersion++;

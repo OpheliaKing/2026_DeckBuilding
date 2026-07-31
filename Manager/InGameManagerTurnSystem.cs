@@ -199,6 +199,7 @@ namespace SHIN
             // 자동사냥 등: AIType이 AI면 UI 대신 AI 루틴
             if (character.AIType == CHARACTER_AI_TYPE.AI)
             {
+                SetPlayerUIVisible(false);
                 PlayerUI?.SetInteractable(false);
                 character.StartAITurn();
                 return;
@@ -210,6 +211,7 @@ namespace SHIN
                 return;
             }
 
+            SetPlayerUIVisible(true);
             PlayerUI.SetInteractable(true);
             PlayerUI.OnCardsDrawn(unitInfo, drawnCards);
         }
@@ -221,6 +223,7 @@ namespace SHIN
 
             Debug.Log($"[TurnSystem] 적 턴 시작: {GetCharacterName(character)} / 드로우 {drawnCards?.Count ?? 0}장");
 
+            SetPlayerUIVisible(false);
             PlayerUI?.SetInteractable(false);
 
             if (character == null || character.IsDead)
@@ -266,7 +269,10 @@ namespace SHIN
             ClearCardSelection();
 
             if (IsPlayerCharacter(character))
+            {
+                SetPlayerUIVisible(false);
                 PlayerUI?.ClearHandUI();
+            }
         }
 
         /// <summary>

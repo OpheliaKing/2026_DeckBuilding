@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -39,18 +40,28 @@ namespace SHIN
         private Action<int> _onNodeClicked;
         private StageMapData _mapData;
         private int _buildVersion;
+        private bool _pendingScrollToAvailable;
+        private Coroutine _scrollRoutine;
 
-        public void BuildMap(StageMapData mapData, Action<int> onNodeClicked)
+        private void OnEnable()
+        {
+            if (_mapData != null || _pendingScrollToAvailable)
+                RequestScrollToAvailableNodes();
+        }
+
+        public void BuildMap(StageMapData mapData, Action<int> onNodeClicked, Action onComplete = null)
         {
             if (mapData == null)
             {
                 Debug.LogError("[StageNodeUI] mapData가 null입니다.");
+                onComplete?.Invoke();
                 return;
             }
 
             if (_stageNodeRoot == null)
             {
                 Debug.LogError("[StageNodeUI] _stageNodeRoot가 없습니다.");
+                onComplete?.Invoke();
                 return;
             }
 
@@ -61,30 +72,16 @@ namespace SHIN
             _onNodeClicked = onNodeClicked;
             UpdateContentSize(mapData);
             SpawnConnectionLines(mapData);
-            SpawnNodeVisualsAsync(mapData);
+            SpawnNodeVisualsAsync(mapData, onComplete);
         }
 
         /// <summary>
         /// 선택 가능한 노드가 보이도록 스크롤 위치를 갱신한다.
+        /// 비활성/레이아웃 미완 시에는 활성화 후 다음 프레임에 적용한다.
         /// </summary>
         public void ScrollToAvailableNodes()
         {
-            if (_mapData == null)
-                return;
-
-            EnsureScrollRect();
-            if (_scrollRect == null)
-                return;
-
-            float focusFloor = GetFocusFloor(_mapData);
-            float maxFloor = Mathf.Max(1, _mapData.GridY - 1);
-            // floor 0(아래) → 0, 보스(위) → 1. Unity verticalNormalizedPosition: 0=아래, 1=위
-            float normalized = Mathf.Clamp01(focusFloor / maxFloor);
-
-            Canvas.ForceUpdateCanvases();
-            _scrollRect.StopMovement();
-            _scrollRect.verticalNormalizedPosition = normalized;
-            _scrollRect.horizontalNormalizedPosition = 0.5f;
+            RequestScrollToAvailableNodes();
         }
 
         public void SetVisible(bool visible)
@@ -111,8 +108,7 @@ namespace SHIN
                 nodeObject.Refresh(node);
             }
 
-            if (gameObject.activeInHierarchy)
-                ScrollToAvailableNodes();
+            RequestScrollToAvailableNodes();
         }
 
         public void ClearMap()
@@ -120,6 +116,65 @@ namespace SHIN
             ClearMapVisuals();
             _onNodeClicked = null;
             _mapData = null;
+            _pendingScrollToAvailable = false;
+            StopScrollRoutine();
+        }
+
+        private void RequestScrollToAvailableNodes()
+        {
+            if (_mapData == null)
+                return;
+
+            if (!gameObject.activeInHierarchy)
+            {
+                _pendingScrollToAvailable = true;
+                return;
+            }
+
+            _pendingScrollToAvailable = false;
+            StopScrollRoutine();
+            _scrollRoutine = StartCoroutine(ScrollToAvailableNodesNextFrame());
+        }
+
+        private IEnumerator ScrollToAvailableNodesNextFrame()
+        {
+            // ContentSizeFitter / Layout 반영 후 스크롤 적용
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+            ApplyScrollToAvailableNodes();
+            // 페이드인·레이아웃 재빌드 후에도 위치가 유지되도록 한 프레임 더
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+            ApplyScrollToAvailableNodes();
+            _scrollRoutine = null;
+        }
+
+        private void ApplyScrollToAvailableNodes()
+        {
+            if (_mapData == null)
+                return;
+
+            EnsureScrollRect();
+            if (_scrollRect == null)
+                return;
+
+            float focusFloor = GetFocusFloor(_mapData);
+            float maxFloor = Mathf.Max(1, _mapData.GridY - 1);
+            // floor 0(아래) → 0, 보스(위) → 1. Unity verticalNormalizedPosition: 0=아래, 1=위
+            float normalized = Mathf.Clamp01(focusFloor / maxFloor);
+
+            _scrollRect.StopMovement();
+            _scrollRect.verticalNormalizedPosition = normalized;
+            _scrollRect.horizontalNormalizedPosition = 0.5f;
+        }
+
+        private void StopScrollRoutine()
+        {
+            if (_scrollRoutine == null)
+                return;
+
+            StopCoroutine(_scrollRoutine);
+            _scrollRoutine = null;
         }
 
         private void ClearMapVisuals()
@@ -218,7 +273,7 @@ namespace SHIN
             }
         }
 
-        private async void SpawnNodeVisualsAsync(StageMapData mapData)
+        private async void SpawnNodeVisualsAsync(StageMapData mapData, Action onComplete)
         {
             int version = _buildVersion;
             Vector2 origin = GetGridOrigin(mapData);
@@ -227,13 +282,17 @@ namespace SHIN
             if (resourceManager == null)
             {
                 Debug.LogError("[StageNodeUI] ResourceManager를 찾을 수 없습니다.");
+                onComplete?.Invoke();
                 return;
             }
 
             for (int i = 0; i < mapData.Nodes.Count; i++)
             {
                 if (version != _buildVersion)
+                {
+                    onComplete?.Invoke();
                     return;
+                }
 
                 StageNodeData nodeData = mapData.Nodes[i];
                 GameObject go = await resourceManager.InstantiateAsync(
@@ -244,6 +303,7 @@ namespace SHIN
                 {
                     if (go != null)
                         resourceManager.ReleaseInstance(go);
+                    onComplete?.Invoke();
                     return;
                 }
 
@@ -281,7 +341,9 @@ namespace SHIN
             }
 
             if (version == _buildVersion)
-                ScrollToAvailableNodes();
+                RequestScrollToAvailableNodes();
+
+            onComplete?.Invoke();
         }
 
         private void HandleNodeClicked(int nodeId)

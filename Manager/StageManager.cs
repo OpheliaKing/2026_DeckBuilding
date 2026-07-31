@@ -11,7 +11,7 @@ namespace SHIN
         #region Constants
 
         private const int GridX = 5;
-        private const int GridY = 3;
+        private const int GridY = 8;
         private const int MaxNodesPerFloor = 3;
         private const int MinNodesPerFloor = 3;
         private const int MinStartNodes = 2;
@@ -218,11 +218,12 @@ namespace SHIN
                 if (uiBase is not StageNodeUI stageNodeUI)
                 {
                     Debug.LogError("[StageManager] StageNodeUI 프리팹에 StageNodeUI 컴포넌트가 없습니다.");
+                    uiManager.SignalContentReady();
                     return;
                 }
 
                 _stageNodeUI = stageNodeUI;
-                stageNodeUI.BuildMap(_mapData, OnNodeClicked);
+                stageNodeUI.BuildMap(_mapData, OnNodeClicked, onComplete: () => uiManager.SignalContentReady());
             });
         }
 
@@ -256,12 +257,11 @@ namespace SHIN
 
         /// <summary>
         /// 인게임 전투 종료 후 호출. 승리 시 클리어→리워드→StageNodeUI 플로우로 이어진다.
+        /// 인게임 스테이지는 리워드 선택 후 맵으로 돌아갈 때 파괴한다.
         /// 마지막 스텝 보스 클리어 시에는 리워드 대신 엔딩 이벤트를 실행한다.
         /// </summary>
         public void OnBattleFinished(bool isVictory)
         {
-            GameManager.Instance?.ClearInGameStage();
-
             if (isVictory && _activeBattleNodeId >= 0)
             {
                 StageNodeData clearedNode = FindNode(_activeBattleNodeId);
@@ -740,8 +740,25 @@ namespace SHIN
             }
 
             _activeBattleNodeId = node.NodeId;
+
+            string stageTid = node.StageTid;
+            UIManager uiManager = ResolveUIManager();
+            if (uiManager != null)
+            {
+                uiManager.BeginFadeCover(() =>
+                {
+                    // SignalContentReady의 ShowCurrentTop이 맵 UI를 다시 켜지 않도록 스택 정리
+                    while (uiManager.Count > 0)
+                        uiManager.Close(revealPrevious: false);
+
+                    _stageNodeUI = null;
+                    GameManager.Instance.InGameStart(stageTid);
+                });
+                return;
+            }
+
             SetStageNodeUIVisible(false);
-            GameManager.Instance.InGameStart(node.StageTid);
+            GameManager.Instance.InGameStart(stageTid);
         }
 
         private static void EnsureBattleStageTid(StageNodeData node)
@@ -783,6 +800,9 @@ namespace SHIN
 
         private void ReturnToStageNodeUI()
         {
+            // 리워드/패배 후 맵 복귀 시점에 인게임 스테이지 파괴
+            GameManager.Instance?.ClearInGameStage();
+
             if (_stageNodeUI == null)
             {
                 ShowStageUI();

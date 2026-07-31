@@ -107,10 +107,16 @@ namespace SHIN
         private async void ShowAsync()
         {
             if (!await EnsureDataSOAsync())
+            {
+                GameManager.Instance?.UIManager?.SignalContentReady();
                 return;
+            }
 
             if (!_isShowing)
+            {
+                GameManager.Instance?.UIManager?.SignalContentReady();
                 return;
+            }
 
             OpenUnitSetupUI();
         }
@@ -151,11 +157,15 @@ namespace SHIN
             uiManager.Show(PublicVariable.Address.UnitSetupUIPrefab, uiBase =>
             {
                 if (!_isShowing)
+                {
+                    uiManager.SignalContentReady();
                     return;
+                }
 
                 if (uiBase is not UnitSetupUI unitSetupUI)
                 {
                     Debug.LogError("[CharacterSelectObject] UnitSetupUI 컴포넌트가 없습니다.");
+                    uiManager.SignalContentReady();
                     return;
                 }
 
@@ -163,7 +173,7 @@ namespace SHIN
                 _unitSetupUI = unitSetupUI;
                 _unitSetupUI.OnCharacterPreviewChanged += OnCharacterSlotSelected;
                 _unitSetupUI.OnSetupCompleted += HandleSetupCompleted;
-                _unitSetupUI.BeginSetup();
+                _unitSetupUI.BeginSetup(onContentReady: () => uiManager.SignalContentReady());
             });
         }
 

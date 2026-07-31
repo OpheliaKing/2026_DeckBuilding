@@ -83,11 +83,13 @@ namespace SHIN
 
         /// <summary>
         /// Addressables로 프리팹을 로드한 뒤 즉시 생성합니다.
+        /// startInactive=true면 완료 콜백 시점에 바로 비활성화해 await 양보 전 한 프레임 노출을 막는다.
         /// </summary>
         public async Task<GameObject> InstantiateAsync(
             string address,
             Transform parent = null,
-            bool instantiateInWorldSpace = false)
+            bool instantiateInWorldSpace = false,
+            bool startInactive = false)
         {
             if (string.IsNullOrEmpty(address))
             {
@@ -96,15 +98,31 @@ namespace SHIN
             }
 
             var handle = Addressables.InstantiateAsync(address, parent, instantiateInWorldSpace);
-            await handle.Task;
+            var tcs = new TaskCompletionSource<GameObject>();
 
-            if (handle.Status != AsyncOperationStatus.Succeeded)
+            void OnCompleted(AsyncOperationHandle<GameObject> op)
             {
-                Debug.LogError($"[ResourceManager] 생성 실패: {address}");
-                return null;
+                handle.Completed -= OnCompleted;
+
+                if (op.Status != AsyncOperationStatus.Succeeded || op.Result == null)
+                {
+                    Debug.LogError($"[ResourceManager] 생성 실패: {address}");
+                    tcs.TrySetResult(null);
+                    return;
+                }
+
+                if (startInactive)
+                    op.Result.SetActive(false);
+
+                tcs.TrySetResult(op.Result);
             }
 
-            return handle.Result;
+            if (handle.IsDone)
+                OnCompleted(handle);
+            else
+                handle.Completed += OnCompleted;
+
+            return await tcs.Task;
         }
 
         /// <summary>
@@ -114,7 +132,8 @@ namespace SHIN
             string address,
             Vector3 position,
             Quaternion rotation,
-            Transform parent = null)
+            Transform parent = null,
+            bool startInactive = false)
         {
             if (string.IsNullOrEmpty(address))
             {
@@ -123,31 +142,52 @@ namespace SHIN
             }
 
             var handle = Addressables.InstantiateAsync(address, position, rotation, parent);
-            await handle.Task;
+            var tcs = new TaskCompletionSource<GameObject>();
 
-            if (handle.Status != AsyncOperationStatus.Succeeded)
+            void OnCompleted(AsyncOperationHandle<GameObject> op)
             {
-                Debug.LogError($"[ResourceManager] 생성 실패: {address}");
-                return null;
+                handle.Completed -= OnCompleted;
+
+                if (op.Status != AsyncOperationStatus.Succeeded || op.Result == null)
+                {
+                    Debug.LogError($"[ResourceManager] 생성 실패: {address}");
+                    tcs.TrySetResult(null);
+                    return;
+                }
+
+                if (startInactive)
+                    op.Result.SetActive(false);
+
+                tcs.TrySetResult(op.Result);
             }
 
-            return handle.Result;
+            if (handle.IsDone)
+                OnCompleted(handle);
+            else
+                handle.Completed += OnCompleted;
+
+            return await tcs.Task;
         }
 
         /// <summary>
         /// 콜백 방식 생성.
         /// </summary>
-        public void InstantiateAsync(string address, Action<GameObject> onComplete, Transform parent = null)
+        public void InstantiateAsync(
+            string address,
+            Action<GameObject> onComplete,
+            Transform parent = null,
+            bool startInactive = false)
         {
-            InstantiateAsyncInternal(address, onComplete, parent);
+            InstantiateAsyncInternal(address, onComplete, parent, startInactive);
         }
 
         private async void InstantiateAsyncInternal(
             string address,
             Action<GameObject> onComplete,
-            Transform parent)
+            Transform parent,
+            bool startInactive)
         {
-            var result = await InstantiateAsync(address, parent);
+            var result = await InstantiateAsync(address, parent, instantiateInWorldSpace: false, startInactive: startInactive);
             onComplete?.Invoke(result);
         }
 

@@ -38,8 +38,9 @@ namespace SHIN
 
         /// <summary>
         /// 캐릭터 선택 단계부터 시작한다.
+        /// onContentReady: 첫 화면 리소스 로드가 끝났을 때(페이드인 등) 호출.
         /// </summary>
-        public void BeginSetup()
+        public void BeginSetup(Action onContentReady = null)
         {
             ResolveChildUIs();
             BindConfirmButton();
@@ -47,7 +48,7 @@ namespace SHIN
             _selectedWeapon = null;
             _isSaving = false;
             _isWeaponStep = false;
-            BeginCharacterSelectAsync();
+            BeginCharacterSelectAsync(onContentReady);
         }
 
         /// <summary>
@@ -98,11 +99,12 @@ namespace SHIN
                 _weaponSelectUI = GetComponentInChildren<WeaponSelectUI>(true);
         }
 
-        private async void BeginCharacterSelectAsync()
+        private async void BeginCharacterSelectAsync(Action onContentReady)
         {
             if (_characterSelectUI == null)
             {
                 Debug.LogError("[UnitSetupUI] CharacterSelectUI가 없습니다.");
+                onContentReady?.Invoke();
                 return;
             }
 
@@ -110,6 +112,7 @@ namespace SHIN
             if (gameManager == null)
             {
                 Debug.LogError("[UnitSetupUI] GameManager.Instance가 없습니다.");
+                onContentReady?.Invoke();
                 return;
             }
 
@@ -119,6 +122,7 @@ namespace SHIN
             if (characterSO == null || characterSO.Count == 0)
             {
                 Debug.LogError("[UnitSetupUI] CharacterSelectDataSO 로드 실패.");
+                onContentReady?.Invoke();
                 return;
             }
 
@@ -126,6 +130,7 @@ namespace SHIN
 
             var list = new List<CharacterSelectData>(characterSO.CharacterSelectDatas);
             _characterSelectUI.Setup(list, OnCharacterConfirmed, OnCharacterPreview);
+            onContentReady?.Invoke();
         }
 
         private void OnCharacterPreview(CharacterSelectData data)
@@ -219,6 +224,17 @@ namespace SHIN
             }
 
             _isSaving = true;
+
+            // StageNodeUI 전환 전 즉시 가림 → 맵 준비 후 SignalContentReady로 페이드인
+            UIManager uiManager = gameManager.UIManager;
+            if (uiManager != null)
+                uiManager.BeginFadeCover(() => CommitPlayerSetup(gameManager, unitTid));
+            else
+                CommitPlayerSetup(gameManager, unitTid);
+        }
+
+        private void CommitPlayerSetup(GameManager gameManager, string unitTid)
+        {
             gameManager.SetupPlayerCharacter(
                 unitTid,
                 _selectedWeapon.WeaponType,
@@ -259,7 +275,9 @@ namespace SHIN
             var uiManager = GameManager.Instance?.UIManager;
             if (uiManager != null && uiManager.Current == this)
             {
-                uiManager.Close();
+                // 페이드 커버 중에는 StartUI 등 이전 화면을 다시 켜지 않음
+                bool revealPrevious = !uiManager.IsWaitingFadeReady;
+                uiManager.Close(revealPrevious);
                 return;
             }
 

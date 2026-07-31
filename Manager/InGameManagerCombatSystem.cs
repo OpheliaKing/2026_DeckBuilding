@@ -1006,6 +1006,7 @@ namespace SHIN
 
             StopAllAITurns();
             ClearCardSelection();
+            SetPlayerUIVisible(false);
             PlayerUI?.SetInteractable(false);
             FireItemEffects(ITEM_EFFECT_TIMING.BATTLE_END);
             SyncPlayerCombatHpToRunData();
