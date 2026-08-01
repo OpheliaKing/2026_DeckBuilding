@@ -50,6 +50,13 @@ namespace SHIN
         public bool IsRangeAttack => _isRangeAttack;
 
         /// <summary>
+        /// 피격 대상 HitEffectPoint에 스폰할 Addressables 이펙트 경로.
+        /// </summary>
+        [SerializeField]
+        private string _hitEffectPath;
+        public string HitEffectPath => _hitEffectPath;
+
+        /// <summary>
         /// 공격대상에게 주는 이벤트 목록
         /// </summary>
         [SerializeField]

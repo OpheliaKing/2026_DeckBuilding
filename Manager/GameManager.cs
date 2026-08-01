@@ -403,6 +403,14 @@ namespace SHIN
                 return;
             }
 
+            // World 스폰 이펙트가 씬에 남지 않도록 캐릭터 풀을 먼저 정리
+            CharacterBase[] characters = _currentStageObject.GetComponentsInChildren<CharacterBase>(true);
+            for (int i = 0; i < characters.Length; i++)
+            {
+                if (characters[i] != null)
+                    characters[i].ReleaseCombatEffects();
+            }
+
             ResourceManager.ReleaseInstance(_currentStageObject);
             _currentStageObject = null;
             _inGameManager = null;

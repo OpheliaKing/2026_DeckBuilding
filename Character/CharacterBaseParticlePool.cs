@@ -7,13 +7,16 @@ namespace SHIN
     /// <summary>
     /// 캐릭터 단위 전투 이펙트 풀.
     /// ResourceManager로 프리팹을 로드한 뒤, 주소별로 인스턴스를 재사용합니다.
+    /// World 스폰도 활성 목록으로 추적해 스테이지/캐릭터 Destroy 시 씬에 남지 않게 합니다.
     /// </summary>
     public partial class CharacterBase
     {
         private readonly Dictionary<string, Queue<GameObject>> _effectPools = new();
         private readonly Dictionary<string, GameObject> _effectPrefabs = new();
         private readonly HashSet<string> _effectLoading = new();
+        private readonly Dictionary<GameObject, string> _activeEffects = new();
         private Transform _effectPoolRoot;
+        private bool _effectPoolDisposed;
 
         /// <summary>
         /// Addressables 주소로 파티클을 스폰합니다. 없으면 로드 후 풀에서 꺼냅니다.
@@ -25,7 +28,7 @@ namespace SHIN
             Vector3 rotationOffset,
             Transform origin)
         {
-            if (string.IsNullOrWhiteSpace(address) || origin == null)
+            if (_effectPoolDisposed || string.IsNullOrWhiteSpace(address) || origin == null)
                 return;
 
             EnsureEffectPoolRoot();
@@ -61,11 +64,27 @@ namespace SHIN
 
                 _effectPrefabs[address] = loaded;
 
-                if (this == null || !isActiveAndEnabled)
+                if (this == null || _effectPoolDisposed || !isActiveAndEnabled)
                     return;
 
                 ActivatePooledEffect(address, loaded, spawnSpace, positionOffset, rotationOffset, origin);
             });
+        }
+
+        /// <summary>
+        /// 카드 피격 이펙트를 HitEffectPoint에 스폰합니다.
+        /// </summary>
+        public void SpawnHitEffect(string address)
+        {
+            if (string.IsNullOrWhiteSpace(address))
+                return;
+
+            SpawnParticleEffect(
+                address,
+                ParticleSpawnSpace.World,
+                Vector3.zero,
+                Vector3.zero,
+                HitEffectPoint);
         }
 
         private void ActivatePooledEffect(
@@ -76,6 +95,9 @@ namespace SHIN
             Vector3 rotationOffset,
             Transform origin)
         {
+            if (_effectPoolDisposed || origin == null)
+                return;
+
             var instance = RentEffect(address, prefab);
             if (instance == null)
                 return;
@@ -88,12 +110,17 @@ namespace SHIN
             }
             else
             {
-                instance.transform.SetParent(null, true);
+                // 스테이지와 수명을 맞추기 위해 InGameManager 아래에 두고, 활성 목록으로도 추적
+                Transform worldRoot = GameManager.Instance?.InGameManager != null
+                    ? GameManager.Instance.InGameManager.transform
+                    : null;
+                instance.transform.SetParent(worldRoot, true);
                 instance.transform.SetPositionAndRotation(
                     origin.TransformPoint(positionOffset),
                     origin.rotation * Quaternion.Euler(rotationOffset));
             }
 
+            _activeEffects[instance] = address;
             instance.SetActive(true);
             RestartParticleSystems(instance);
             StartCoroutine(ReturnEffectWhenFinished(address, instance));
@@ -130,7 +157,7 @@ namespace SHIN
 
             while (elapsed < wait)
             {
-                if (instance == null)
+                if (_effectPoolDisposed || instance == null)
                     yield break;
 
                 // 히트스톱/일시정지에 맞춰 이펙트 수명도 CharacterTimeScale을 따름
@@ -141,7 +168,8 @@ namespace SHIN
                 yield return null;
             }
 
-            ReturnEffect(address, instance);
+            if (!_effectPoolDisposed)
+                ReturnEffect(address, instance);
         }
 
         private void ReturnEffect(string address, GameObject instance)
@@ -149,7 +177,9 @@ namespace SHIN
             if (instance == null)
                 return;
 
-            if (string.IsNullOrEmpty(address) || !isActiveAndEnabled)
+            _activeEffects.Remove(instance);
+
+            if (_effectPoolDisposed || string.IsNullOrEmpty(address) || !isActiveAndEnabled)
             {
                 Destroy(instance);
                 return;
@@ -207,8 +237,33 @@ namespace SHIN
             return Mathf.Clamp(duration, 0.1f, 10f);
         }
 
+        /// <summary>
+        /// 풀 + 월드에 떠 있는 활성 이펙트까지 모두 파괴합니다.
+        /// 스테이지 해제 직전/캐릭터 Destroy 시 호출합니다.
+        /// </summary>
+        public void ReleaseCombatEffects()
+        {
+            CleanupEffectPools();
+        }
+
         private void CleanupEffectPools()
         {
+            if (_effectPoolDisposed)
+                return;
+
+            _effectPoolDisposed = true;
+
+            if (_activeEffects.Count > 0)
+            {
+                var actives = new List<GameObject>(_activeEffects.Keys);
+                _activeEffects.Clear();
+                for (int i = 0; i < actives.Count; i++)
+                {
+                    if (actives[i] != null)
+                        Destroy(actives[i]);
+                }
+            }
+
             foreach (var pair in _effectPools)
             {
                 while (pair.Value.Count > 0)
@@ -224,7 +279,10 @@ namespace SHIN
             _effectLoading.Clear();
 
             if (_effectPoolRoot != null)
+            {
                 Destroy(_effectPoolRoot.gameObject);
+                _effectPoolRoot = null;
+            }
         }
     }
 }

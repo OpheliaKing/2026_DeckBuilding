@@ -577,6 +577,14 @@ namespace SHIN
             // 판정 타이밍: Hit + 카메라 흔들기
             session.Target.PlayHitAnimation();
 
+            if (session.Card != null)
+            {
+                string hitEffectPath = string.IsNullOrEmpty(session.Card.HitEffectPath)
+                    ? PublicVariable.Address.DefaultHitEffectPrefab
+                    : session.Card.HitEffectPath;
+                session.Target.SpawnHitEffect(hitEffectPath);
+            }
+
             int applied = session.Target.TakeDamage(damage);
             Debug.Log(
                 $"[Combat][HIT] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} / " +

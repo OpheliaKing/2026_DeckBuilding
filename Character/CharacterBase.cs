@@ -4,6 +4,14 @@ namespace SHIN
 {
     public partial class CharacterBase : MonoBehaviour
     {
+        [Header("Combat FX")]
+        [SerializeField]
+        [Tooltip("피격 이펙트 스폰 위치. 비우면 캐릭터 루트 사용")]
+        private Transform _hitEffectPoint;
+
+        /// <summary>피격 이펙트 기준 Transform. 미지정 시 자신.</summary>
+        public Transform HitEffectPoint => _hitEffectPoint != null ? _hitEffectPoint : transform;
+
         private UnitInfo _unitInfo;
         public UnitInfo UnitInfo => _unitInfo;
 
