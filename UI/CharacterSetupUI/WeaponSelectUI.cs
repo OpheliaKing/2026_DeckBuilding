@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace SHIN
 {
@@ -13,11 +12,10 @@ namespace SHIN
         [SerializeField]
         private IconCycleSelectUI _iconCycleSelectUI;
 
-        [SerializeField]
-        private Button _confirmButton;
-
         private readonly List<WeaponData> _weapons = new();
         private Action<WeaponData> _onConfirmed;
+        private Action _onBack;
+        private Action<WeaponData> _onPreviewChanged;
         private int _currentIndex;
         private int _iconLoadVersion;
 
@@ -26,9 +24,16 @@ namespace SHIN
                 ? _weapons[_currentIndex]
                 : null;
 
-        public void Setup(IReadOnlyList<WeaponData> weapons, Action<WeaponData> onConfirmed, int startIndex = 0)
+        public void Setup(
+            IReadOnlyList<WeaponData> weapons,
+            Action<WeaponData> onConfirmed,
+            Action onBack = null,
+            Action<WeaponData> onPreviewChanged = null,
+            int startIndex = 0)
         {
             _onConfirmed = onConfirmed;
+            _onBack = onBack;
+            _onPreviewChanged = onPreviewChanged;
             _weapons.Clear();
 
             if (weapons != null)
@@ -40,7 +45,6 @@ namespace SHIN
                 }
             }
 
-            BindConfirmButton();
             BindIconCycle();
 
             if (_weapons.Count == 0)
@@ -52,7 +56,7 @@ namespace SHIN
             }
 
             _currentIndex = Mathf.Clamp(startIndex, 0, _weapons.Count - 1);
-            RefreshCurrentIcon();
+            RefreshCurrentWeapon();
         }
 
         /// <summary>
@@ -70,28 +74,12 @@ namespace SHIN
             _onConfirmed?.Invoke(selected);
         }
 
-        private void BindConfirmButton()
+        /// <summary>
+        /// Inspector 뒤로가기 버튼에서 연결. 캐릭터 선택 단계로 돌아간다.
+        /// </summary>
+        public void OnClickBack()
         {
-            if (_confirmButton == null)
-                _confirmButton = FindConfirmButton();
-
-            if (_confirmButton == null)
-                return;
-
-            _confirmButton.onClick.RemoveListener(OnClickConfirm);
-            _confirmButton.onClick.AddListener(OnClickConfirm);
-        }
-
-        private Button FindConfirmButton()
-        {
-            Button[] buttons = GetComponentsInChildren<Button>(true);
-            for (int i = 0; i < buttons.Length; i++)
-            {
-                if (buttons[i] != null && buttons[i].gameObject.name == "SelectButton")
-                    return buttons[i];
-            }
-
-            return null;
+            _onBack?.Invoke();
         }
 
         private void BindIconCycle()
@@ -124,19 +112,20 @@ namespace SHIN
                 return;
 
             _currentIndex = nextIndex;
-            RefreshCurrentIcon();
+            RefreshCurrentWeapon();
         }
 
-        private void RefreshCurrentIcon()
+        private void RefreshCurrentWeapon()
         {
             WeaponData weapon = SelectedWeapon;
-            if (weapon == null || _iconCycleSelectUI == null)
+            if (weapon == null)
             {
                 _iconCycleSelectUI?.ClearIcon();
                 return;
             }
 
             UpdateIconAsync(weapon.IconPath);
+            _onPreviewChanged?.Invoke(weapon);
         }
 
         private async void UpdateIconAsync(string iconName)
@@ -167,9 +156,6 @@ namespace SHIN
 
         private void OnDestroy()
         {
-            if (_confirmButton != null)
-                _confirmButton.onClick.RemoveListener(OnClickConfirm);
-
             if (_iconCycleSelectUI != null)
                 _iconCycleSelectUI.OnMoveRequested -= HandleMoveRequested;
         }

@@ -97,5 +97,6 @@ namespace SHIN
         public List<string> CardDeckList = new();
 
         public string IconPath;
+        public string AnimName;
     }
 }

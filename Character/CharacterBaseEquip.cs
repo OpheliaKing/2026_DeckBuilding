@@ -67,7 +67,7 @@ namespace SHIN
             {
                 case CHARACTER_EQUIP_TYPE.SWORD:
                     return PublicVariable.Address.PlayerAnimatorSword;
-                case CHARACTER_EQUIP_TYPE.BOW:
+                case CHARACTER_EQUIP_TYPE.GUN:
                     return PublicVariable.Address.PlayerAnimatorBow;
                 default:
                     return null;
@@ -87,6 +87,6 @@ namespace SHIN
     {
         NONE,
         SWORD,
-        BOW,
+        GUN,
     }
 }

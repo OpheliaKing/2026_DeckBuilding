@@ -16,16 +16,21 @@ namespace SHIN
         [SerializeField]
         private WeaponSelectUI _weaponSelectUI;
 
-        [SerializeField]
-        private UnityEngine.UI.Button _confirmButton;
-
         private CharacterSelectData _selectedCharacter;
         private WeaponData _selectedWeapon;
         private bool _isSaving;
-        private bool _isWeaponStep;
 
         /// <summary>슬롯 미리보기용. CharacterSelectObject 모델 갱신 등에 사용.</summary>
         public event Action<CharacterSelectData> OnCharacterPreviewChanged;
+
+        /// <summary>무기 미리보기용. CharacterSelectObject 애니메이션 재생 등에 사용.</summary>
+        public event Action<WeaponData> OnWeaponPreviewChanged;
+
+        /// <summary>캐릭터 선택 단계 표시 시.</summary>
+        public event Action OnCharacterStepShown;
+
+        /// <summary>무기 선택 단계 표시 시.</summary>
+        public event Action OnWeaponStepShown;
 
         /// <summary>유닛 세팅 완료(저장) 후.</summary>
         public event Action<UnitInfo> OnSetupCompleted;
@@ -33,7 +38,6 @@ namespace SHIN
         private void Awake()
         {
             ResolveChildUIs();
-            BindConfirmButton();
         }
 
         /// <summary>
@@ -43,51 +47,10 @@ namespace SHIN
         public void BeginSetup(Action onContentReady = null)
         {
             ResolveChildUIs();
-            BindConfirmButton();
             _selectedCharacter = null;
             _selectedWeapon = null;
             _isSaving = false;
-            _isWeaponStep = false;
             BeginCharacterSelectAsync(onContentReady);
-        }
-
-        /// <summary>
-        /// 공유 확정 버튼. Inspector 또는 SelectButton에서 연결.
-        /// </summary>
-        public void OnClickConfirm()
-        {
-            if (_isWeaponStep)
-                _weaponSelectUI?.OnClickConfirm();
-            else
-                _characterSelectUI?.OnClickConfirm();
-        }
-
-        private void BindConfirmButton()
-        {
-            if (_confirmButton == null)
-                _confirmButton = FindSelectButton(transform);
-
-            if (_confirmButton == null)
-                return;
-
-            // 단계 전환 시에도 보이도록 UnitSetupUI 하위로 유지
-            if (_confirmButton.transform.parent != transform)
-                _confirmButton.transform.SetParent(transform, true);
-
-            _confirmButton.onClick.RemoveListener(OnClickConfirm);
-            _confirmButton.onClick.AddListener(OnClickConfirm);
-        }
-
-        private static UnityEngine.UI.Button FindSelectButton(Transform root)
-        {
-            UnityEngine.UI.Button[] buttons = root.GetComponentsInChildren<UnityEngine.UI.Button>(true);
-            for (int i = 0; i < buttons.Length; i++)
-            {
-                if (buttons[i] != null && buttons[i].gameObject.name == "SelectButton")
-                    return buttons[i];
-            }
-
-            return null;
         }
 
         private void ResolveChildUIs()
@@ -206,10 +169,29 @@ namespace SHIN
             }
 
             ShowWeaponStep();
-            _isWeaponStep = true;
 
             var list = new List<WeaponData>(weaponSO.WeaponDatas);
-            _weaponSelectUI.Setup(list, OnWeaponConfirmed);
+            _weaponSelectUI.Setup(list, OnWeaponConfirmed, OnWeaponBack, OnWeaponPreview);
+        }
+
+        private void OnWeaponPreview(WeaponData weapon)
+        {
+            if (weapon == null)
+                return;
+
+            OnWeaponPreviewChanged?.Invoke(weapon);
+        }
+
+        private void OnWeaponBack()
+        {
+            if (_isSaving)
+                return;
+
+            _selectedWeapon = null;
+            ShowCharacterStep();
+
+            if (_selectedCharacter != null)
+                _characterSelectUI?.SetSelected(_selectedCharacter);
         }
 
         private void OnWeaponConfirmed(WeaponData weapon)
@@ -275,13 +257,13 @@ namespace SHIN
 
         private void ShowCharacterStep()
         {
-            _isWeaponStep = false;
-
             if (_characterSelectUI != null)
                 _characterSelectUI.gameObject.SetActive(true);
 
             if (_weaponSelectUI != null)
                 _weaponSelectUI.gameObject.SetActive(false);
+
+            OnCharacterStepShown?.Invoke();
         }
 
         private void ShowWeaponStep()
@@ -292,8 +274,7 @@ namespace SHIN
             if (_weaponSelectUI != null)
                 _weaponSelectUI.gameObject.SetActive(true);
 
-            if (_confirmButton != null)
-                _confirmButton.gameObject.SetActive(true);
+            OnWeaponStepShown?.Invoke();
         }
 
         private void CloseSelf()
@@ -308,12 +289,6 @@ namespace SHIN
             }
 
             gameObject.SetActive(false);
-        }
-
-        private void OnDestroy()
-        {
-            if (_confirmButton != null)
-                _confirmButton.onClick.RemoveListener(OnClickConfirm);
         }
     }
 }

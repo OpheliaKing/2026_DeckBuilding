@@ -32,9 +32,40 @@ namespace SHIN
         public CharacterSelectData Data => _data;
         public bool IsAppearing => _appearRoutine != null;
 
+        private Animator _animator;
+
         public void Initialize(CharacterSelectData data)
         {
             _data = data;
+        }
+
+        /// <summary>
+        /// 무기 미리보기용 애니메이션 재생. AnimName은 Animator State 이름.
+        /// </summary>
+        public bool PlayAnimation(string animationName)
+        {
+            if (string.IsNullOrEmpty(animationName))
+                return false;
+
+            if (_animator == null)
+                _animator = GetComponentInChildren<Animator>(true);
+
+            if (_animator == null || !_animator.isActiveAndEnabled)
+            {
+                Debug.LogWarning($"[CharacterSelectModel] Animator 없음: {name} / {animationName}");
+                return false;
+            }
+
+            int stateHash = Animator.StringToHash(animationName);
+            if (!_animator.HasState(0, stateHash))
+            {
+                Debug.LogWarning($"[CharacterSelectModel] State 없음: {name} / {animationName}");
+                return false;
+            }
+
+            _animator.Play(stateHash, 0, 0f);
+            _animator.Update(0f);
+            return true;
         }
 
         /// <summary>

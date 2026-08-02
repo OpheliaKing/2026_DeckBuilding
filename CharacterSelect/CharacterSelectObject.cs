@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Cinemachine;
 using UnityEngine;
 
 namespace SHIN
@@ -13,6 +14,15 @@ namespace SHIN
     {
         [SerializeField]
         private Transform _modelRoot;
+
+        [Header("Setup Cameras")]
+        [SerializeField]
+        [Tooltip("캐릭터 선택 UI용 Virtual Camera")]
+        private CinemachineVirtualCamera _characterSelectCamera;
+
+        [SerializeField]
+        [Tooltip("무기 선택 UI용 Virtual Camera")]
+        private CinemachineVirtualCamera _weaponSelectCamera;
 
         [Header("Appear Dissolve")]
         [SerializeField]
@@ -45,6 +55,7 @@ namespace SHIN
         {
             gameObject.SetActive(true);
             _isShowing = true;
+            SetSetupCamera(weaponStep: false);
             ShowAsync();
         }
 
@@ -53,6 +64,7 @@ namespace SHIN
             _isShowing = false;
             HideAllCachedModels();
             UnbindUnitSetupUI();
+            SetSetupCamera(weaponStep: false);
 
             if (_unitSetupUI != null)
             {
@@ -178,9 +190,48 @@ namespace SHIN
                 UnbindUnitSetupUI();
                 _unitSetupUI = unitSetupUI;
                 _unitSetupUI.OnCharacterPreviewChanged += OnCharacterSlotSelected;
+                _unitSetupUI.OnWeaponPreviewChanged += OnWeaponPreviewSelected;
+                _unitSetupUI.OnCharacterStepShown += OnCharacterStepShown;
+                _unitSetupUI.OnWeaponStepShown += OnWeaponStepShown;
                 _unitSetupUI.OnSetupCompleted += HandleSetupCompleted;
                 _unitSetupUI.BeginSetup(onContentReady: () => uiManager.SignalContentReady());
             });
+        }
+
+        private void OnCharacterStepShown()
+        {
+            SetSetupCamera(weaponStep: false);
+        }
+
+        private void OnWeaponStepShown()
+        {
+            SetSetupCamera(weaponStep: true);
+        }
+
+        /// <summary>
+        /// 캐릭터/무기 선택 단계에 맞는 Virtual Camera만 켠다.
+        /// </summary>
+        private void SetSetupCamera(bool weaponStep)
+        {
+            if (_characterSelectCamera != null)
+                _characterSelectCamera.gameObject.SetActive(!weaponStep);
+
+            if (_weaponSelectCamera != null)
+                _weaponSelectCamera.gameObject.SetActive(weaponStep);
+        }
+
+        /// <summary>
+        /// 무기 선택 UI에서 무기 변경 시 AnimName 애니메이션을 재생한다.
+        /// </summary>
+        private void OnWeaponPreviewSelected(WeaponData weapon)
+        {
+            if (weapon == null || string.IsNullOrEmpty(weapon.AnimName))
+                return;
+
+            if (_currentModel == null)
+                return;
+
+            _currentModel.PlayAnimation(weapon.AnimName);
         }
 
         private void HandleSetupCompleted(UnitInfo unitInfo)
@@ -189,6 +240,7 @@ namespace SHIN
             _unitSetupUI = null;
             _isShowing = false;
             HideAllCachedModels();
+            SetSetupCamera(weaponStep: false);
             gameObject.SetActive(false);
             OnSetupCompleted?.Invoke(unitInfo);
         }
@@ -199,6 +251,9 @@ namespace SHIN
                 return;
 
             _unitSetupUI.OnCharacterPreviewChanged -= OnCharacterSlotSelected;
+            _unitSetupUI.OnWeaponPreviewChanged -= OnWeaponPreviewSelected;
+            _unitSetupUI.OnCharacterStepShown -= OnCharacterStepShown;
+            _unitSetupUI.OnWeaponStepShown -= OnWeaponStepShown;
             _unitSetupUI.OnSetupCompleted -= HandleSetupCompleted;
         }
 
