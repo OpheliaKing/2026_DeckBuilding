@@ -47,7 +47,7 @@ namespace SHIN
                 animator.Update(0f);
             }
 
-            ApplyWeaponModelVisibility();
+            await EquipWeaponModelAsync(resourceManager);
         }
 
         public void SetEquipType(CHARACTER_EQUIP_TYPE equipType)
@@ -75,11 +75,35 @@ namespace SHIN
         }
 
         /// <summary>
-        /// 현재 장비 타입에 따라 모델링의 무기를 활성화/비활성화합니다.
-        /// 무기 모델 구조 확정 후 구현합니다.
+        /// WeaponDataSO의 PrefabEntries를 CharacterWeaponSlot 소켓에 장착한다.
         /// </summary>
-        private void ApplyWeaponModelVisibility()
+        private async Task EquipWeaponModelAsync(ResourceManager resourceManager)
         {
+            var slot = GetComponentInChildren<CharacterWeaponSlot>(true);
+            if (slot == null)
+            {
+                Debug.LogWarning($"[Equip] CharacterWeaponSlot이 없습니다: {name}");
+                return;
+            }
+
+            var gameManager = GameManager.Instance;
+            if (gameManager == null)
+            {
+                Debug.LogError($"[Equip] GameManager가 없습니다: {name}");
+                return;
+            }
+
+            WeaponDataSO weaponSO = await gameManager.GetSOAsync<WeaponDataSO>(
+                PublicVariable.Address.WeaponDataSO);
+            if (weaponSO == null ||
+                !weaponSO.TryGetWeaponData(_unitInfo.EquipType, out WeaponData weaponData) ||
+                weaponData == null)
+            {
+                slot.ClearEquipped(resourceManager);
+                return;
+            }
+
+            await slot.EquipAsync(weaponData, resourceManager);
         }
     }
 

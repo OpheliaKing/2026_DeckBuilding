@@ -201,6 +201,7 @@ namespace SHIN
         private void OnCharacterStepShown()
         {
             SetSetupCamera(weaponStep: false);
+            HideWeaponsOnAllModels();
         }
 
         private void OnWeaponStepShown()
@@ -220,18 +221,27 @@ namespace SHIN
                 _weaponSelectCamera.gameObject.SetActive(weaponStep);
         }
 
+        private void HideWeaponsOnAllModels()
+        {
+            foreach (var pair in _modelCache)
+            {
+                if (pair.Value.Model != null)
+                    pair.Value.Model.HideWeaponPreview();
+            }
+        }
+
         /// <summary>
-        /// 무기 선택 UI에서 무기 변경 시 AnimName 애니메이션을 재생한다.
+        /// 무기 선택 UI에서 무기 변경 시 모델 장착 + AnimName 애니메이션을 재생한다.
         /// </summary>
         private void OnWeaponPreviewSelected(WeaponData weapon)
         {
-            if (weapon == null || string.IsNullOrEmpty(weapon.AnimName))
-                return;
-
             if (_currentModel == null)
                 return;
 
-            _currentModel.PlayAnimation(weapon.AnimName);
+            _currentModel.EquipWeaponPreview(weapon);
+
+            if (weapon != null && !string.IsNullOrEmpty(weapon.AnimName))
+                _currentModel.PlayAnimation(weapon.AnimName);
         }
 
         private void HandleSetupCompleted(UnitInfo unitInfo)
@@ -384,7 +394,10 @@ namespace SHIN
                     continue;
 
                 if (!shouldActive && pair.Value.Model != null)
+                {
                     pair.Value.Model.StopAppearDissolve(showFully: true);
+                    pair.Value.Model.HideWeaponPreview();
+                }
 
                 pair.Value.GameObject.SetActive(shouldActive);
             }
@@ -404,6 +417,9 @@ namespace SHIN
         {
             foreach (var pair in _modelCache)
             {
+                if (pair.Value.Model != null)
+                    pair.Value.Model.HideWeaponPreview();
+
                 if (pair.Value.GameObject != null)
                     pair.Value.GameObject.SetActive(false);
             }

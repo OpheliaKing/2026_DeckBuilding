@@ -98,5 +98,43 @@ namespace SHIN
 
         public string IconPath;
         public string AnimName;
+
+        /// <summary>
+        /// 장착 위치별 무기 프리팹 Addressables 경로.
+        /// Unity Dictionary 미직렬화 대신 List로 관리한다.
+        /// </summary>
+        public List<WeaponPrefabEntry> PrefabEntries = new();
+
+        public bool TryGetPrefabPath(WEAPON_POSITION_TYPE position, out string prefabPath)
+        {
+            prefabPath = null;
+            if (PrefabEntries == null)
+                return false;
+
+            for (int i = 0; i < PrefabEntries.Count; i++)
+            {
+                WeaponPrefabEntry entry = PrefabEntries[i];
+                if (entry == null || entry.Position != position)
+                    continue;
+
+                if (string.IsNullOrEmpty(entry.PrefabPath))
+                    continue;
+
+                prefabPath = entry.PrefabPath;
+                return true;
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// WEAPON_POSITION_TYPE → PrefabPath. Inspector 직렬화용 Dictionary 대체.
+    /// </summary>
+    [Serializable]
+    public class WeaponPrefabEntry
+    {
+        public WEAPON_POSITION_TYPE Position = WEAPON_POSITION_TYPE.RIGHT_HAND;
+        public string PrefabPath;
     }
 }

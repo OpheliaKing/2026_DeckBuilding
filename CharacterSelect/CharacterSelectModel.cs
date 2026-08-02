@@ -33,6 +33,8 @@ namespace SHIN
         public bool IsAppearing => _appearRoutine != null;
 
         private Animator _animator;
+        private CharacterWeaponSlot _weaponSlot;
+        private int _weaponEquipVersion;
 
         public void Initialize(CharacterSelectData data)
         {
@@ -66,6 +68,50 @@ namespace SHIN
             _animator.Play(stateHash, 0, 0f);
             _animator.Update(0f);
             return true;
+        }
+
+        /// <summary>
+        /// 선택 화면 무기 미리보기. PrefabEntries를 CharacterWeaponSlot에 장착한다.
+        /// </summary>
+        public async void EquipWeaponPreview(WeaponData weaponData)
+        {
+            int version = ++_weaponEquipVersion;
+
+            if (_weaponSlot == null)
+                _weaponSlot = GetComponentInChildren<CharacterWeaponSlot>(true);
+
+            if (_weaponSlot == null)
+            {
+                Debug.LogWarning($"[CharacterSelectModel] CharacterWeaponSlot 없음: {name}");
+                return;
+            }
+
+            var resourceManager = GameManager.Instance?.ResourceManager;
+            if (resourceManager == null)
+            {
+                Debug.LogError($"[CharacterSelectModel] ResourceManager 없음: {name}");
+                return;
+            }
+
+            await _weaponSlot.EquipAsync(weaponData, resourceManager);
+            if (version != _weaponEquipVersion)
+                return;
+        }
+
+        /// <summary>캐릭터 선택 단계로 돌아갈 때 무기만 숨긴다(캐시 유지).</summary>
+        public void HideWeaponPreview()
+        {
+            _weaponEquipVersion++;
+
+            if (_weaponSlot == null)
+                _weaponSlot = GetComponentInChildren<CharacterWeaponSlot>(true);
+
+            _weaponSlot?.HideEquipped();
+        }
+
+        public void ClearWeaponPreview()
+        {
+            HideWeaponPreview();
         }
 
         /// <summary>
