@@ -138,8 +138,26 @@ namespace SHIN
             if (data == null)
                 return;
 
+            // 이미 선택된 캐릭터면 모델 갱신/디졸브 재재생하지 않음
+            if (IsSameCharacter(_selectedCharacter, data))
+                return;
+
             _selectedCharacter = data;
             OnCharacterPreviewChanged?.Invoke(data);
+        }
+
+        private static bool IsSameCharacter(CharacterSelectData a, CharacterSelectData b)
+        {
+            if (a == null || b == null)
+                return false;
+
+            if (!string.IsNullOrEmpty(a.Tid) && !string.IsNullOrEmpty(b.Tid))
+                return a.Tid == b.Tid;
+
+            if (!string.IsNullOrEmpty(a.PrefabPath) && !string.IsNullOrEmpty(b.PrefabPath))
+                return a.PrefabPath == b.PrefabPath;
+
+            return ReferenceEquals(a, b);
         }
 
         private void OnCharacterConfirmed(CharacterSelectData data)
@@ -150,8 +168,16 @@ namespace SHIN
                 return;
             }
 
-            _selectedCharacter = data;
-            OnCharacterPreviewChanged?.Invoke(data);
+            if (!IsSameCharacter(_selectedCharacter, data))
+            {
+                _selectedCharacter = data;
+                OnCharacterPreviewChanged?.Invoke(data);
+            }
+            else
+            {
+                _selectedCharacter = data;
+            }
+
             BeginWeaponSelectAsync();
         }
 

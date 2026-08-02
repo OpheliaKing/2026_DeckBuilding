@@ -66,6 +66,7 @@ namespace SHIN
     {
         public string Tid;
         public string Name;
+        [TextArea(3, 10)]
         public string Description;
         public string Icon;
         public string PrefabPath;

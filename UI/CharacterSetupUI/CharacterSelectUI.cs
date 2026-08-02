@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -15,6 +16,12 @@ namespace SHIN
 
         [SerializeField]
         private Button _confirmButton;
+
+        [SerializeField]
+        private TextMeshProUGUI _nameText;
+
+        [SerializeField]
+        private TextMeshProUGUI _descriptionText;
 
         private readonly List<CharacterSelectSlotUI> _slots = new();
         private Action<CharacterSelectData> _onConfirmed;
@@ -42,6 +49,7 @@ namespace SHIN
             if (characterList == null || characterList.Count == 0)
             {
                 Debug.LogWarning("[CharacterSelectUI] 캐릭터 리스트가 비어 있습니다.");
+                RefreshInfoTexts();
                 return;
             }
 
@@ -58,6 +66,7 @@ namespace SHIN
         {
             _selectedData = data;
             RefreshSelection();
+            RefreshInfoTexts();
         }
 
         /// <summary>
@@ -158,6 +167,7 @@ namespace SHIN
                 _selectedData = characterList[0];
 
             RefreshSelection();
+            RefreshInfoTexts();
 
             if (_selectedData != null)
                 _onPreviewChanged?.Invoke(_selectedData);
@@ -170,6 +180,7 @@ namespace SHIN
 
             _selectedData = data;
             RefreshSelection();
+            RefreshInfoTexts();
             _onPreviewChanged?.Invoke(data);
         }
 
@@ -192,6 +203,15 @@ namespace SHIN
 
                 slot.SetSelected(selected);
             }
+        }
+
+        private void RefreshInfoTexts()
+        {
+            if (_nameText != null)
+                _nameText.text = _selectedData?.Name ?? string.Empty;
+
+            if (_descriptionText != null)
+                _descriptionText.text = _selectedData?.Description ?? string.Empty;
         }
 
         private void ClearSlots()
