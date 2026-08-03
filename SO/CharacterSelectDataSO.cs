@@ -70,6 +70,13 @@ namespace SHIN
         public string Description;
         public string Icon;
         public string PrefabPath;
+
+        /// <summary>
+        /// UnitData.unitTid와 동일해야 한다. (선택 화면 Tid와는 별개)
+        /// </summary>
         public string UnitDataSOTid;
+
+        /// <summary>UnitData.unitTid 별칭.</summary>
+        public string UnitTid => UnitDataSOTid;
     }
 }

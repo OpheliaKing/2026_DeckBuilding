@@ -9,16 +9,20 @@ namespace SHIN
     {
         BGM,
         SE,
+        VOICE,
     }
 
     /// <summary>
-    /// BGM(단일) / SE(다중) 재생. path 기준 AudioClip 캐시 후 ResourceManager로 로드.
+    /// BGM(단일) / SE(다중) / VOICE(단일) 재생. path 기준 AudioClip 캐시 후 ResourceManager로 로드.
     /// </summary>
     public class SoundManager : ManagerBase
     {
         [Header("Sources")]
         [SerializeField]
         private AudioSource _bgmSource;
+
+        [SerializeField]
+        private AudioSource _voiceSource;
 
         [SerializeField]
         private int _seSourceCount = 8;
@@ -31,6 +35,10 @@ namespace SHIN
         [SerializeField]
         [Range(0f, 1f)]
         private float _seVolume = 1f;
+
+        [SerializeField]
+        [Range(0f, 1f)]
+        private float _voiceVolume = 1f;
 
         [SerializeField]
         [Range(0f, 1f)]
@@ -51,6 +59,7 @@ namespace SHIN
 
         public float BgmVolume => _bgmVolume;
         public float SeVolume => _seVolume;
+        public float VoiceVolume => _voiceVolume;
         public float MasterVolume => _masterVolume;
 
         private void Awake()
@@ -127,6 +136,41 @@ namespace SHIN
 
             source.volume = GetEffectiveVolume(SOUND_TYPE.SE);
             source.PlayOneShot(clip, 1f);
+        }
+
+        /// <summary>캐릭터 VOICE 재생. 이전 VOICE는 끊고 새로 재생한다.</summary>
+        public void PlayVoice(string path)
+        {
+            PlayVoiceAsync(path);
+        }
+
+        public async Task PlayVoiceAsync(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                Debug.LogError("[SoundManager] VOICE path가 비어 있습니다.");
+                return;
+            }
+
+            EnsureSources();
+            AudioClip clip = await GetOrLoadClipAsync(path);
+            if (clip == null || _voiceSource == null)
+                return;
+
+            _voiceSource.Stop();
+            _voiceSource.clip = clip;
+            _voiceSource.loop = false;
+            _voiceSource.volume = GetEffectiveVolume(SOUND_TYPE.VOICE);
+            _voiceSource.Play();
+        }
+
+        public void StopVoice()
+        {
+            if (_voiceSource == null)
+                return;
+
+            _voiceSource.Stop();
+            _voiceSource.clip = null;
         }
 
         /// <summary>Inspector에 등록된 SE path들을 미리 로드한다.</summary>
@@ -207,6 +251,12 @@ namespace SHIN
             ApplyVolumes();
         }
 
+        public void SetVoiceVolume(float volume)
+        {
+            _voiceVolume = Mathf.Clamp01(volume);
+            ApplyVolumes();
+        }
+
         public void SetMasterVolume(float volume)
         {
             _masterVolume = Mathf.Clamp01(volume);
@@ -222,6 +272,9 @@ namespace SHIN
                     break;
                 case SOUND_TYPE.SE:
                     SetSeVolume(volume);
+                    break;
+                case SOUND_TYPE.VOICE:
+                    SetVoiceVolume(volume);
                     break;
             }
         }
@@ -282,6 +335,16 @@ namespace SHIN
                 _bgmSource.spatialBlend = 0f;
             }
 
+            if (_voiceSource == null)
+            {
+                var voiceGo = new GameObject("VOICE");
+                voiceGo.transform.SetParent(transform);
+                _voiceSource = voiceGo.AddComponent<AudioSource>();
+                _voiceSource.playOnAwake = false;
+                _voiceSource.loop = false;
+                _voiceSource.spatialBlend = 0f;
+            }
+
             int targetCount = Mathf.Max(1, _seSourceCount);
             while (_seSources.Count < targetCount)
             {
@@ -319,7 +382,20 @@ namespace SHIN
 
         private float GetEffectiveVolume(SOUND_TYPE type)
         {
-            float channel = type == SOUND_TYPE.BGM ? _bgmVolume : _seVolume;
+            float channel;
+            switch (type)
+            {
+                case SOUND_TYPE.BGM:
+                    channel = _bgmVolume;
+                    break;
+                case SOUND_TYPE.VOICE:
+                    channel = _voiceVolume;
+                    break;
+                default:
+                    channel = _seVolume;
+                    break;
+            }
+
             return Mathf.Clamp01(_masterVolume * channel);
         }
 
@@ -327,6 +403,9 @@ namespace SHIN
         {
             if (_bgmSource != null)
                 _bgmSource.volume = GetEffectiveVolume(SOUND_TYPE.BGM);
+
+            if (_voiceSource != null)
+                _voiceSource.volume = GetEffectiveVolume(SOUND_TYPE.VOICE);
 
             float seVol = GetEffectiveVolume(SOUND_TYPE.SE);
             for (int i = 0; i < _seSources.Count; i++)

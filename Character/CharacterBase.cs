@@ -18,6 +18,9 @@ namespace SHIN
         public bool IsDead => _unitInfo == null || _unitInfo.IsDead;
         public bool IsAlive => !IsDead;
 
+        /// <summary>보이스/유닛 공통 TID. UnitData.unitTid.</summary>
+        public string UnitTid => _unitInfo?.UnitData?.unitTid;
+
         private void Awake()
         {
             EnsureClickCollider();

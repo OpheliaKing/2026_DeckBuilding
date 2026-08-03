@@ -14,9 +14,14 @@ namespace SHIN
             get
             {
                 if (_animator == null)
-                    _animator = GetComponentInChildren<Animator>();
+                    _animator = GetComponentInChildren<Animator>(true);
                 return _animator;
             }
+        }
+
+        public void InvalidateAnimatorCache()
+        {
+            _animator = null;
         }
 
         public const string HitAnimationName = "Hit";

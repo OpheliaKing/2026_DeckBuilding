@@ -176,6 +176,7 @@ namespace SHIN
                     }
 
                     character.InitCharacter(combatUnitInfo);
+                    await character.AttachVisualModelAsync(resourceManager);
                     character.SetAIType(CHARACTER_AI_TYPE.PLAYER);
                 }
             }

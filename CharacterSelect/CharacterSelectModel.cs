@@ -32,6 +32,9 @@ namespace SHIN
         public CharacterSelectData Data => _data;
         public bool IsAppearing => _appearRoutine != null;
 
+        /// <summary>보이스/유닛 공통 TID. CharacterSelectData.UnitDataSOTid (== UnitData.unitTid).</summary>
+        public string UnitTid => _data?.UnitDataSOTid;
+
         private Animator _animator;
         private CharacterWeaponSlot _weaponSlot;
         private int _weaponEquipVersion;

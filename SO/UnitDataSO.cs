@@ -72,7 +72,19 @@ namespace SHIN
         public int unitBaseMaxCardCost;
         public string unitName;
         public string unitIcon;
+
+        /// <summary>
+        /// 전투 루트 프리팹.
+        /// 플레이어: 공용 PlayerUnit / 몬스터: 개체별 풀 프리팹.
+        /// </summary>
         public string unitPrefabPath;
+
+        /// <summary>
+        /// 비주얼 모델 프리팹. 플레이어만 사용(공용 셸에 자식으로 장착).
+        /// 몬스터는 비워 둔다.
+        /// </summary>
+        public string unitModelPath;
+
         public List<string> unitCardList;
     }
 }

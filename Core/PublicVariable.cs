@@ -52,6 +52,9 @@ namespace SHIN
                 "Assets/Addressables/Prefab/UI/FadeUI.prefab";
             public const string UiButtonClickSe =
                 "Assets/Addressables/Sound/UI/Button/button_click_001.wav";
+            /// <summary>캐릭터 보이스 루트. 최종 경로: VoiceRoot + unitTid + "/" + fileName</summary>
+            public const string VoiceRoot =
+                "Assets/Addressables/Sound/Voice/";
             public const string DefaultHitEffectPrefab =
                 "Assets/Addressables/Prefab/Effect/Unit/Sword/effect_sword_slash_hit_001.prefab";
             public const string UIAtlas = "Assets/Addressables/Atlas/UIAtlas.spriteatlasv2";
@@ -59,6 +62,8 @@ namespace SHIN
                 "Assets/Addressables/Animator/Player/PlayerAnimator_Sword.controller";
             public const string PlayerAnimatorBow =
                 "Assets/Addressables/Animator/Player/PlayerAnimator_Bow.controller";
+            public const string PlayerUnitPrefab =
+                "Assets/Addressables/Prefab/Unit/Player/PlayerUnit.prefab";
         }
     }
 }
