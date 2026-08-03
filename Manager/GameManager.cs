@@ -105,6 +105,10 @@ namespace SHIN
         {
             await InitializeSOIndexesAsync();
 
+            SoundManager soundManager = SoundManager;
+            if (soundManager != null)
+                await soundManager.PreloadConfiguredSeAsync();
+
             UIManager uiManager = UIManager;
             if (uiManager != null)
                 await uiManager.PreloadFadeUIAsync();

@@ -36,7 +36,16 @@ namespace SHIN
         [Range(0f, 1f)]
         private float _masterVolume = 1f;
 
+        [Header("Preload")]
+        [Tooltip("Boot 시 Addressables로 미리 로드할 SE path 목록. 첫 클릭 지연 방지용.")]
+        [SerializeField]
+        private List<string> _preloadSePaths = new()
+        {
+            PublicVariable.Address.UiButtonClickSe,
+        };
+
         private readonly Dictionary<string, AudioClip> _clipCache = new();
+        private readonly Dictionary<string, Task<AudioClip>> _loadingTasks = new();
         private readonly List<AudioSource> _seSources = new();
         private int _seNextIndex;
 
@@ -120,6 +129,63 @@ namespace SHIN
             source.PlayOneShot(clip, 1f);
         }
 
+        /// <summary>Inspector에 등록된 SE path들을 미리 로드한다.</summary>
+        public void PreloadConfiguredSe()
+        {
+            PreloadConfiguredSeAsync();
+        }
+
+        public Task PreloadConfiguredSeAsync()
+        {
+            return PreloadSeAsync(_preloadSePaths);
+        }
+
+        /// <summary>SE 클립을 캐시에 미리 로드한다. 이미 있으면 스킵.</summary>
+        public void PreloadSe(string path)
+        {
+            PreloadSeAsync(path);
+        }
+
+        public async Task PreloadSeAsync(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return;
+
+            await GetOrLoadClipAsync(path);
+        }
+
+        public void PreloadSe(IEnumerable<string> paths)
+        {
+            PreloadSeAsync(paths);
+        }
+
+        public async Task PreloadSeAsync(IEnumerable<string> paths)
+        {
+            if (paths == null)
+                return;
+
+            var tasks = new List<Task>();
+            foreach (string path in paths)
+            {
+                if (string.IsNullOrEmpty(path))
+                    continue;
+
+                tasks.Add(GetOrLoadClipAsync(path));
+            }
+
+            if (tasks.Count == 0)
+                return;
+
+            await Task.WhenAll(tasks);
+        }
+
+        public bool IsSeCached(string path)
+        {
+            return !string.IsNullOrEmpty(path)
+                   && _clipCache.TryGetValue(path, out AudioClip clip)
+                   && clip != null;
+        }
+
         public void StopAllSe()
         {
             for (int i = 0; i < _seSources.Count; i++)
@@ -161,6 +227,27 @@ namespace SHIN
         }
 
         private async Task<AudioClip> GetOrLoadClipAsync(string path)
+        {
+            if (_clipCache.TryGetValue(path, out AudioClip cached) && cached != null)
+                return cached;
+
+            if (_loadingTasks.TryGetValue(path, out Task<AudioClip> inFlight))
+                return await inFlight;
+
+            Task<AudioClip> loadTask = LoadClipInternalAsync(path);
+            _loadingTasks[path] = loadTask;
+
+            try
+            {
+                return await loadTask;
+            }
+            finally
+            {
+                _loadingTasks.Remove(path);
+            }
+        }
+
+        private async Task<AudioClip> LoadClipInternalAsync(string path)
         {
             if (_clipCache.TryGetValue(path, out AudioClip cached) && cached != null)
                 return cached;

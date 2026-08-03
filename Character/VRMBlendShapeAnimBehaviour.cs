@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using VRM;
 
@@ -7,6 +8,7 @@ namespace SHIN
     /// <summary>
     /// Animator State에 붙여 VRMBlendShapeProxy 표정을 제어합니다.
     /// Start/End 구간에서 AnimationCurve 또는 BlendDuration(초) 중 하나로 강도를 조절합니다.
+    /// 표정은 State Enter당 1회만 평가합니다(normalizedTime wrap 없음).
     /// </summary>
     public class VRMBlendShapeAnimBehaviour : StateMachineBehaviour
     {
@@ -67,8 +69,15 @@ namespace SHIN
 
         private VRMBlendShapeProxy _proxy;
 
+        /// <summary>Enter당 1회 재생이 끝난 뒤(첫 사이클 종료) true.</summary>
+        private bool _finishedOnce;
+
+        /// <summary>같은 BlendShapeKey 타겟을 합칠 때 사용 (GC 줄이기용 재사용).</summary>
+        private readonly Dictionary<BlendShapeKey, float> _mergedWeights = new();
+
         public override void OnStateEnter(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
         {
+            _finishedOnce = false;
             _proxy = ResolveProxy(animator);
             if (_proxy == null)
                 return;
@@ -89,6 +98,8 @@ namespace SHIN
 
         public override void OnStateExit(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
         {
+            _finishedOnce = true;
+
             if (!_resetOnExit)
                 return;
 
@@ -106,9 +117,20 @@ namespace SHIN
             if (_proxy == null || _targets == null)
                 return;
 
-            float normalizedTime = GetCycleTime(stateInfo);
+            // Enter당 1회: wrap 없이 첫 사이클(0~1)만 사용. 이후는 0 유지.
+            float rawNormalizedTime = stateInfo.normalizedTime;
+            if (_finishedOnce || rawNormalizedTime >= 1f)
+            {
+                _finishedOnce = true;
+                ApplyAllZero();
+                return;
+            }
+
+            float normalizedTime = rawNormalizedTime;
             float stateLength = Mathf.Max(0.0001f, stateInfo.length);
 
+            // 같은 Key(예: Fun 구간 2개)는 덮어쓰지 않고 Max로 합친다.
+            _mergedWeights.Clear();
             for (int i = 0; i < _targets.Length; i++)
             {
                 BlendShapeTarget target = _targets[i];
@@ -119,8 +141,14 @@ namespace SHIN
                     continue;
 
                 float value = EvaluateTargetWeight(target, normalizedTime, stateLength);
-                _proxy.ImmediatelySetValue(key, value);
+                if (_mergedWeights.TryGetValue(key, out float existing))
+                    _mergedWeights[key] = Mathf.Max(existing, value);
+                else
+                    _mergedWeights[key] = value;
             }
+
+            foreach (KeyValuePair<BlendShapeKey, float> pair in _mergedWeights)
+                _proxy.ImmediatelySetValue(pair.Key, pair.Value);
         }
 
         private void ApplyAllZero()
@@ -128,6 +156,7 @@ namespace SHIN
             if (_proxy == null || _targets == null)
                 return;
 
+            _mergedWeights.Clear();
             for (int i = 0; i < _targets.Length; i++)
             {
                 BlendShapeTarget target = _targets[i];
@@ -137,6 +166,10 @@ namespace SHIN
                 if (!TryCreateKey(target, out BlendShapeKey key))
                     continue;
 
+                if (_mergedWeights.ContainsKey(key))
+                    continue;
+
+                _mergedWeights[key] = 0f;
                 _proxy.ImmediatelySetValue(key, 0f);
             }
         }
@@ -219,12 +252,6 @@ namespace SHIN
                 s = e;
                 e = tmp;
             }
-        }
-
-        private static float GetCycleTime(AnimatorStateInfo stateInfo)
-        {
-            float t = stateInfo.normalizedTime;
-            return t - Mathf.Floor(t);
         }
 
         private static bool TryCreateKey(BlendShapeTarget target, out BlendShapeKey key)

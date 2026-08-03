@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 namespace SHIN
 {
-    public class InGameCardObject : MonoBehaviour, IPointerClickHandler
+    public class InGameCardObject : ClickEventUI
     {
         [SerializeField]
         private TextMeshProUGUI _cardNameText;
@@ -46,14 +46,16 @@ namespace SHIN
             _interactable = interactable;
         }
 
-        public void OnPointerClick(PointerEventData eventData)
+        protected override bool CanClick(PointerEventData eventData)
         {
-            if (!_interactable)
-                return;
+            if (!base.CanClick(eventData))
+                return false;
 
-            if (eventData != null && eventData.button != PointerEventData.InputButton.Left)
-                return;
+            return _interactable;
+        }
 
+        protected override void HandleClick(PointerEventData eventData)
+        {
             OnClickCard();
         }
 

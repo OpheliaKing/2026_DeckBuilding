@@ -8,7 +8,7 @@ namespace SHIN
     /// <summary>
     /// 개별 스테이지 노드 UI.
     /// </summary>
-    public class StageNodeObjectUI : MonoBehaviour, IPointerClickHandler
+    public class StageNodeObjectUI : ClickEventUI
     {
         private const string AnimSelectAble = "SelectAble";
         private const string AnimNone = "None";
@@ -38,11 +38,16 @@ namespace SHIN
             RefreshVisual();
         }
 
-        public void OnPointerClick(PointerEventData eventData)
+        protected override bool CanClick(PointerEventData eventData)
         {
-            if (_nodeData == null)
-                return;
+            if (!base.CanClick(eventData))
+                return false;
 
+            return _nodeData != null;
+        }
+
+        protected override void HandleClick(PointerEventData eventData)
+        {
             _onClicked?.Invoke(_nodeData.NodeId);
         }
 

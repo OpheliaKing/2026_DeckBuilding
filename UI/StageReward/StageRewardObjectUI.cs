@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 namespace SHIN
 {
-    public class StageRewardObjectUI : MonoBehaviour, IPointerClickHandler
+    public class StageRewardObjectUI : ClickEventUI
     {
         [SerializeField]
         private GameObject _selectedMark;
@@ -62,12 +62,17 @@ namespace SHIN
                 _selectedMark.SetActive(selected);
         }
 
-        public void OnPointerClick(PointerEventData eventData)
+        protected override bool CanClick(PointerEventData eventData)
         {
-            if (eventData != null && eventData.button != PointerEventData.InputButton.Left)
-                return;
+            if (!base.CanClick(eventData))
+                return false;
 
-            HandleClick();
+            return _offer != null;
+        }
+
+        protected override void HandleClick(PointerEventData eventData)
+        {
+            _onClicked?.Invoke(this);
         }
 
         private async void ApplyOfferVisualAsync(int version)
@@ -190,14 +195,6 @@ namespace SHIN
 
             _cardInstance = null;
             _cardObj = null;
-        }
-
-        private void HandleClick()
-        {
-            if (_offer == null)
-                return;
-
-            _onClicked?.Invoke(this);
         }
 
         private void EnsureUiClickable()

@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 namespace SHIN
 {
-    public class StageShopUIObject : MonoBehaviour, IPointerClickHandler
+    public class StageShopUIObject : ClickEventUI
     {
         [Header("Item")]
         [SerializeField]
@@ -80,11 +80,16 @@ namespace SHIN
             UpdatePriceVisual();
         }
 
-        public void OnPointerClick(PointerEventData eventData)
+        protected override bool CanClick(PointerEventData eventData)
         {
-            if (eventData != null && eventData.button != PointerEventData.InputButton.Left)
-                return;
+            if (!base.CanClick(eventData))
+                return false;
 
+            return _offer != null && !_offer.IsSoldOut;
+        }
+
+        protected override void HandleClick(PointerEventData eventData)
+        {
             HandleBuyClick();
         }
 

@@ -50,6 +50,8 @@ namespace SHIN
                 "Assets/Addressables/Prefab/UI/EndingSequenceUI.prefab";
             public const string FadeUIPrefab =
                 "Assets/Addressables/Prefab/UI/FadeUI.prefab";
+            public const string UiButtonClickSe =
+                "Assets/Addressables/Sound/UI/Button/button_click_001.wav";
             public const string DefaultHitEffectPrefab =
                 "Assets/Addressables/Prefab/Effect/Unit/Sword/effect_sword_slash_hit_001.prefab";
             public const string UIAtlas = "Assets/Addressables/Atlas/UIAtlas.spriteatlasv2";
