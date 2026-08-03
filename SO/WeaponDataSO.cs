@@ -99,6 +99,10 @@ namespace SHIN
         public string IconPath;
         public string AnimName;
 
+        public string WeaponName;
+        [TextArea]
+        public string WeaponDescription;
+
         /// <summary>
         /// 장착 위치별 무기 프리팹 Addressables 경로.
         /// Unity Dictionary 미직렬화 대신 List로 관리한다.

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 
 namespace SHIN
@@ -11,6 +12,12 @@ namespace SHIN
     {
         [SerializeField]
         private IconCycleSelectUI _iconCycleSelectUI;
+
+        [SerializeField]
+        private TextMeshProUGUI _nameText;
+
+        [SerializeField]
+        private TextMeshProUGUI _descriptionText;
 
         private readonly List<WeaponData> _weapons = new();
         private Action<WeaponData> _onConfirmed;
@@ -51,6 +58,7 @@ namespace SHIN
             {
                 _currentIndex = -1;
                 _iconCycleSelectUI?.ClearIcon();
+                RefreshInfoTexts();
                 Debug.LogWarning("[WeaponSelectUI] 무기 리스트가 비어 있습니다.");
                 return;
             }
@@ -121,11 +129,24 @@ namespace SHIN
             if (weapon == null)
             {
                 _iconCycleSelectUI?.ClearIcon();
+                RefreshInfoTexts();
                 return;
             }
 
             UpdateIconAsync(weapon.IconPath);
+            RefreshInfoTexts();
             _onPreviewChanged?.Invoke(weapon);
+        }
+
+        private void RefreshInfoTexts()
+        {
+            WeaponData weapon = SelectedWeapon;
+
+            if (_nameText != null)
+                _nameText.text = weapon?.WeaponName ?? string.Empty;
+
+            if (_descriptionText != null)
+                _descriptionText.text = weapon?.WeaponDescription ?? string.Empty;
         }
 
         private async void UpdateIconAsync(string iconName)
