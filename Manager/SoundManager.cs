@@ -57,15 +57,80 @@ namespace SHIN
         private readonly List<AudioSource> _seSources = new();
         private int _seNextIndex;
 
+        private BGM_STATE _currentBgmState = BGM_STATE.None;
+        private BGMDataSO _bgmDataSO;
+        private Task<BGMDataSO> _bgmDataLoadTask;
+
         public float BgmVolume => _bgmVolume;
         public float SeVolume => _seVolume;
         public float VoiceVolume => _voiceVolume;
         public float MasterVolume => _masterVolume;
+        public BGM_STATE CurrentBgmState => _currentBgmState;
 
         private void Awake()
         {
             EnsureSources();
             ApplyVolumes();
+        }
+
+        /// <summary>
+        /// BGMDataSO 기준으로 상태별 BGM 재생.
+        /// 같은 state가 이미 재생 중이면 유지한다. path가 비어 있으면 스킵한다.
+        /// </summary>
+        public void PlayBgm(BGM_STATE state, bool force = false)
+        {
+            PlayBgmByStateAsync(state, force);
+        }
+
+        public async Task PlayBgmByStateAsync(BGM_STATE state, bool force = false)
+        {
+            if (state == BGM_STATE.None)
+            {
+                StopBgm();
+                return;
+            }
+
+            if (!force
+                && state == _currentBgmState
+                && _bgmSource != null
+                && _bgmSource.isPlaying)
+                return;
+
+            BGMDataSO so = await GetBgmDataSOAsync();
+            if (so == null || !so.TryGetBgmData(state, out BgmData data) || data == null)
+            {
+                Debug.LogWarning($"[SoundManager] BGM 데이터 없음: {state}");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(data.Path))
+            {
+                Debug.LogWarning($"[SoundManager] BGM path가 비어 있습니다: {state}");
+                return;
+            }
+
+            bool played = await PlayBgmAsync(data.Path, data.Loop);
+            if (played)
+                _currentBgmState = state;
+        }
+
+        /// <summary>지정 state의 BGM 클립을 미리 로드한다.</summary>
+        public void PreloadBgm(BGM_STATE state)
+        {
+            PreloadBgmAsync(state);
+        }
+
+        public async Task PreloadBgmAsync(BGM_STATE state)
+        {
+            if (state == BGM_STATE.None)
+                return;
+
+            BGMDataSO so = await GetBgmDataSOAsync();
+            string path = so?.GetPath(state);
+            if (string.IsNullOrEmpty(path))
+                return;
+
+            await GetOrLoadClipAsync(path);
         }
 
         /// <summary>BGM 재생. 이미 같은 path면 유지, 다르면 교체. loop 기본 true.</summary>
@@ -74,38 +139,78 @@ namespace SHIN
             PlayBgmAsync(path, loop);
         }
 
-        public async Task PlayBgmAsync(string path, bool loop = true)
+        public async Task<bool> PlayBgmAsync(string path, bool loop = true)
         {
             if (string.IsNullOrEmpty(path))
             {
                 Debug.LogError("[SoundManager] BGM path가 비어 있습니다.");
-                return;
+                return false;
             }
 
             EnsureSources();
             AudioClip clip = await GetOrLoadClipAsync(path);
             if (clip == null || _bgmSource == null)
-                return;
+                return false;
 
             if (_bgmSource.clip == clip && _bgmSource.isPlaying)
             {
                 _bgmSource.loop = loop;
-                return;
+                return true;
             }
 
             _bgmSource.clip = clip;
             _bgmSource.loop = loop;
             _bgmSource.volume = GetEffectiveVolume(SOUND_TYPE.BGM);
             _bgmSource.Play();
+            return true;
         }
 
         public void StopBgm()
         {
+            _currentBgmState = BGM_STATE.None;
             if (_bgmSource == null)
                 return;
 
             _bgmSource.Stop();
             _bgmSource.clip = null;
+        }
+
+        private async Task<BGMDataSO> GetBgmDataSOAsync()
+        {
+            if (_bgmDataSO != null)
+                return _bgmDataSO;
+
+            if (_bgmDataLoadTask != null)
+                return await _bgmDataLoadTask;
+
+            _bgmDataLoadTask = LoadBgmDataSOInternalAsync();
+            try
+            {
+                return await _bgmDataLoadTask;
+            }
+            finally
+            {
+                _bgmDataLoadTask = null;
+            }
+        }
+
+        private async Task<BGMDataSO> LoadBgmDataSOInternalAsync()
+        {
+            if (_bgmDataSO != null)
+                return _bgmDataSO;
+
+            var gameManager = GameManager.Instance;
+            if (gameManager == null)
+            {
+                Debug.LogError("[SoundManager] GameManager를 찾을 수 없습니다.");
+                return null;
+            }
+
+            _bgmDataSO = await gameManager.GetSOAsync<BGMDataSO>(PublicVariable.Address.BGMDataSO);
+            if (_bgmDataSO == null)
+                Debug.LogError("[SoundManager] BGMDataSO 로드 실패");
+
+            return _bgmDataSO;
         }
 
         /// <summary>SE 재생. 여러 개 동시 재생 가능.</summary>

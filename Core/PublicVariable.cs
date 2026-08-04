@@ -18,6 +18,7 @@ namespace SHIN
             public const string InGameCombatEventSO = "Assets/Addressables/SO/InGameCombatEventSO.asset";
             public const string CharacterSelectDataSO = "Assets/Addressables/SO/CharacterSelectDataSO.asset";
             public const string WeaponDataSO = "Assets/Addressables/SO/WeaponDataSO.asset";
+            public const string BGMDataSO = "Assets/Addressables/SO/BGMDataSO.asset";
             public const string CardObjectPrefab = "Assets/Addressables/Prefab/UI/Card/CardObject.prefab";
             public const string PlayerUIPrefab = "Assets/Addressables/Prefab/UI/PlayerUI.prefab";
             public const string StageNodeUIPrefab = "Assets/Addressables/Prefab/UI/Stage/StageNodeUI.prefab";
@@ -52,6 +53,9 @@ namespace SHIN
                 "Assets/Addressables/Prefab/UI/FadeUI.prefab";
             public const string UiButtonClickSe =
                 "Assets/Addressables/Sound/UI/Button/button_click_001.wav";
+            /// <summary>타이틀(인트로) BGM. BGMDataSO의 Intro와 동일 경로를 유지한다.</summary>
+            public const string BgmIntro =
+                "Assets/Addressables/Sound/BGM/bgm_intro_001.ogg";
             /// <summary>캐릭터 보이스 루트. 최종 경로: VoiceRoot + unitTid + "/" + fileName</summary>
             public const string VoiceRoot =
                 "Assets/Addressables/Sound/Voice/";

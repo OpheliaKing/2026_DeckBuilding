@@ -194,7 +194,9 @@ namespace SHIN
                 _unitSetupUI.OnCharacterStepShown += OnCharacterStepShown;
                 _unitSetupUI.OnWeaponStepShown += OnWeaponStepShown;
                 _unitSetupUI.OnSetupCompleted += HandleSetupCompleted;
-                _unitSetupUI.BeginSetup(onContentReady: () => uiManager.SignalContentReady());
+                _unitSetupUI.BeginSetup(onContentReady: () =>
+                    uiManager.SignalContentReady(() =>
+                        GameManager.Instance?.SoundManager?.PlayBgm(BGM_STATE.CharacterSelect)));
             });
         }
 

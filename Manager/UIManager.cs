@@ -140,10 +140,13 @@ namespace SHIN
         /// useFade Show 이후, 리소스/데이터 준비가 끝났을 때 호출.
         /// FadeUI가 페이드인한 뒤 오버레이를 내린다.
         /// </summary>
-        public void SignalContentReady()
+        public void SignalContentReady(Action onFadeComplete = null)
         {
             if (!_waitingContentReadyForFade)
+            {
+                onFadeComplete?.Invoke();
                 return;
+            }
 
             _waitingContentReadyForFade = false;
 
@@ -154,7 +157,10 @@ namespace SHIN
             BringFadeToFront();
 
             if (_fadeUI == null)
+            {
+                onFadeComplete?.Invoke();
                 return;
+            }
 
             FadeUI fade = _fadeUI;
             fade.FadeIn(() =>
@@ -162,6 +168,8 @@ namespace SHIN
                 // 다음 전환을 위해 인스턴스는 유지하고 투명만 처리
                 if (_fadeUI == fade)
                     fade.SetTransparentImmediate();
+
+                onFadeComplete?.Invoke();
             });
         }
 

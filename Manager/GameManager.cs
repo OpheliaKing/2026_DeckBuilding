@@ -107,7 +107,11 @@ namespace SHIN
 
             SoundManager soundManager = SoundManager;
             if (soundManager != null)
+            {
                 await soundManager.PreloadConfiguredSeAsync();
+                // 타이틀 BGM도 미리 로드해 페이드 직후 끊김 없이 재생
+                await soundManager.PreloadBgmAsync(BGM_STATE.Intro);
+            }
 
             UIManager uiManager = UIManager;
             if (uiManager != null)
@@ -116,7 +120,15 @@ namespace SHIN
             _hasSaveData = StageManager.HasSaveData();
             Debug.Log($"[GameManager] BootFlow 세이브 유무: {_hasSaveData}");
 
+            // 리소스 준비 후 페이드 커버 → StartUI → 페이드인 완료 시 BGM
+            if (uiManager != null)
+            {
+                uiManager.BeginFadeCover(ShowStartUI);
+                return;
+            }
+
             ShowStartUI();
+            PlayIntroBgm();
         }
 
         /// <summary>
@@ -173,6 +185,7 @@ namespace SHIN
             {
                 Debug.LogError("[GameManager] UIManager가 없습니다.");
                 _isBooting = false;
+                PlayIntroBgm();
                 return;
             }
 
@@ -182,12 +195,31 @@ namespace SHIN
                 {
                     Debug.LogError("[GameManager] StartUI 컴포넌트가 없습니다.");
                     _isBooting = false;
+                    uiManager.SignalContentReady(PlayIntroBgm);
                     return;
                 }
 
                 startUI.Setup(_hasSaveData);
                 _isBooting = false;
+
+                // 리소스·StartUI 준비 후 페이드인이 끝나면 BGM 재생
+                if (uiManager.IsWaitingFadeReady)
+                    uiManager.SignalContentReady(PlayIntroBgm);
+                else
+                    PlayIntroBgm();
             });
+        }
+
+        private void PlayIntroBgm()
+        {
+            SoundManager soundManager = SoundManager;
+            if (soundManager == null)
+            {
+                Debug.LogError("[GameManager] SoundManager가 없어 인트로 BGM을 재생할 수 없습니다.");
+                return;
+            }
+
+            soundManager.PlayBgm(BGM_STATE.Intro);
         }
 
         /// <summary>
@@ -216,7 +248,18 @@ namespace SHIN
             if (uiManager != null)
                 await uiManager.PreloadFadeUIAsync();
 
+            SoundManager soundManager = SoundManager;
+            if (soundManager != null)
+                await soundManager.PreloadBgmAsync(BGM_STATE.Intro);
+
+            if (uiManager != null)
+            {
+                uiManager.BeginFadeCover(ShowStartUI);
+                return;
+            }
+
             ShowStartUI();
+            PlayIntroBgm();
         }
 
         private void ContinueRun()
@@ -333,7 +376,8 @@ namespace SHIN
                 _bootUnitSetupUI = unitSetupUI;
                 _bootUnitSetupUI.OnSetupCompleted -= OnNewRunSetupCompleted;
                 _bootUnitSetupUI.OnSetupCompleted += OnNewRunSetupCompleted;
-                _bootUnitSetupUI.BeginSetup(onContentReady: () => uiManager.SignalContentReady());
+                _bootUnitSetupUI.BeginSetup(onContentReady: () =>
+                    uiManager.SignalContentReady(() => SoundManager?.PlayBgm(BGM_STATE.CharacterSelect)));
             });
         }
 

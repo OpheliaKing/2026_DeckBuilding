@@ -223,7 +223,9 @@ namespace SHIN
                 }
 
                 _stageNodeUI = stageNodeUI;
-                stageNodeUI.BuildMap(_mapData, OnNodeClicked, onComplete: () => uiManager.SignalContentReady());
+                stageNodeUI.BuildMap(_mapData, OnNodeClicked, onComplete: () =>
+                    uiManager.SignalContentReady(() =>
+                        GameManager.Instance?.SoundManager?.PlayBgm(BGM_STATE.StageMap)));
             });
         }
 

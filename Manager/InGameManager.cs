@@ -314,8 +314,9 @@ namespace SHIN
             InitCombatDecks();
             InitTurnSystem();
 
-            // 캐릭터·PlayerUI·턴 준비 완료 후 페이드인 (첫 턴 진행 전)
-            GameManager.Instance?.UIManager?.SignalContentReady();
+            // 캐릭터·PlayerUI·턴 준비 완료 후 페이드인 → 전투 BGM (첫 턴 진행 전)
+            GameManager.Instance?.UIManager?.SignalContentReady(() =>
+                GameManager.Instance?.SoundManager?.PlayBgm(BGM_STATE.Battle));
 
             await BattleStartTimingAsync();
             StartNextTurn();
