@@ -78,6 +78,12 @@ namespace SHIN
         /// <summary>BootFlow에서 확인한 세이브 존재 여부.</summary>
         public bool HasSaveData => _hasSaveData;
 
+        protected override void Awake()
+        {
+            base.Awake();
+            BootCover.Ensure();
+        }
+
         public void Start()
         {
             BootFlow();
@@ -103,6 +109,8 @@ namespace SHIN
 
         private async void BootFlowAsync()
         {
+            BootCover.Ensure();
+
             await InitializeSOIndexesAsync();
 
             SoundManager soundManager = SoundManager;
@@ -120,14 +128,20 @@ namespace SHIN
             _hasSaveData = StageManager.HasSaveData();
             Debug.Log($"[GameManager] BootFlow 세이브 유무: {_hasSaveData}");
 
-            // 리소스 준비 후 페이드 커버 → StartUI → 페이드인 완료 시 BGM
+            // FadeUI가 화면을 인수한 뒤 BootCover 제거 → StartUI는 메인 Canvas에 생성
             if (uiManager != null)
             {
-                uiManager.BeginFadeCover(ShowStartUI);
+                uiManager.BeginFadeCover(() =>
+                {
+                    BootCover.Release();
+                    // BootCover Destroy 직후 캐시된 잘못된 루트가 남지 않도록
+                    ShowStartUI();
+                });
                 return;
             }
 
             ShowStartUI();
+            BootCover.Release();
             PlayIntroBgm();
         }
 
@@ -244,6 +258,8 @@ namespace SHIN
 
         private async void PreloadFadeThenShowStartUI()
         {
+            BootCover.Ensure();
+
             UIManager uiManager = UIManager;
             if (uiManager != null)
                 await uiManager.PreloadFadeUIAsync();
@@ -254,11 +270,16 @@ namespace SHIN
 
             if (uiManager != null)
             {
-                uiManager.BeginFadeCover(ShowStartUI);
+                uiManager.BeginFadeCover(() =>
+                {
+                    BootCover.Release();
+                    ShowStartUI();
+                });
                 return;
             }
 
             ShowStartUI();
+            BootCover.Release();
             PlayIntroBgm();
         }
 

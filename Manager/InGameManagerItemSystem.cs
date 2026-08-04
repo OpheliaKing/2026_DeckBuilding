@@ -413,7 +413,12 @@ namespace SHIN
 
                 var drawn = unitInfo.DrawCards(count);
                 if (IsPlayerCharacter(targets[i]) && PlayerUI != null)
+                {
+                    for (int d = 0; d < drawn.Count; d++)
+                        GameManager.Instance?.SoundManager?.PlaySe(PublicVariable.Address.SeCardDraw);
+
                     PlayerUI.RefreshHand(unitInfo.Hand);
+                }
 
                 Debug.Log($"[CombatEvent][DRAW] {GetCombatName(targets[i])} +{drawn.Count}장");
             }

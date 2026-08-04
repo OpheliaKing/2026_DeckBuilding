@@ -13,9 +13,12 @@ namespace SHIN
         private TextMeshProUGUI _cardDescriptionText;
         [SerializeField]
         private TextMeshProUGUI _cardCostText;
+        [SerializeField]
+        private Image _cardIllustrationImage;
 
         private CardData _cardData;
         private bool _interactable = true;
+        private int _illustLoadVersion;
 
         public CardData CardData => _cardData;
         public bool Interactable => _interactable;
@@ -38,6 +41,7 @@ namespace SHIN
             if (_cardCostText != null)
                 _cardCostText.text = cardData != null ? cardData.Cost.ToString() : string.Empty;
 
+            RefreshIllustrationAsync(cardData != null ? cardData.IllustrationPath : null);
             EnsureUiClickable();
         }
 
@@ -78,6 +82,44 @@ namespace SHIN
             }
 
             inGameManager.OnCardClicked(this);
+        }
+
+        private async void RefreshIllustrationAsync(string illustrationPath)
+        {
+            if (_cardIllustrationImage == null)
+                return;
+
+            int version = ++_illustLoadVersion;
+
+            if (string.IsNullOrEmpty(illustrationPath))
+            {
+                _cardIllustrationImage.sprite = null;
+                _cardIllustrationImage.enabled = false;
+                return;
+            }
+
+            var resourceManager = GameManager.Instance?.ResourceManager;
+            if (resourceManager == null)
+            {
+                Debug.LogError("[InGameCardObject] ResourceManager를 찾을 수 없습니다.");
+                return;
+            }
+
+            Sprite sprite = await resourceManager.LoadAsync<Sprite>(illustrationPath);
+            if (version != _illustLoadVersion)
+                return;
+
+            if (sprite == null)
+            {
+                _cardIllustrationImage.sprite = null;
+                _cardIllustrationImage.enabled = false;
+                return;
+            }
+
+            _cardIllustrationImage.enabled = true;
+            _cardIllustrationImage.sprite = sprite;
+            _cardIllustrationImage.preserveAspect = true;
+            _cardIllustrationImage.color = Color.white;
         }
 
         /// <summary>

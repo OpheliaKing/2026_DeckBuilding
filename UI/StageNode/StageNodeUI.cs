@@ -30,10 +30,31 @@ namespace SHIN
         private float _contentPadding = 80f;
 
         [SerializeField]
-        private Color _lineColor = new(0.55f, 0.55f, 0.55f, 1f);
+        private Color _lineColor = new(0.86f, 0.62f, 0.72f, 0.85f);
 
         [SerializeField]
         private float _lineThickness = 4f;
+
+        [SerializeField]
+        private StageMapHudUI _hud;
+
+        [SerializeField]
+        private Button _inventoryButton;
+
+        [Header("Map Panel (scrolls with content)")]
+        [SerializeField]
+        private Image _mapPanelImage;
+
+        [SerializeField]
+        private float _mapPanelExtraPadding = 56f;
+
+        [SerializeField]
+        [Tooltip("상단 보석/장식과 노드가 겹치지 않도록 위쪽만 추가 여백")]
+        private float _mapPanelTopOrnamentPadding = 80f;
+
+        [SerializeField]
+        [Tooltip("하단 보석/장식과 노드가 겹치지 않도록 아래쪽만 추가 여백")]
+        private float _mapPanelBottomOrnamentPadding = 80f;
 
         private readonly Dictionary<int, StageNodeObjectUI> _nodeObjects = new();
         private Transform _lineRoot;
@@ -42,11 +63,23 @@ namespace SHIN
         private int _buildVersion;
         private bool _pendingScrollToAvailable;
         private Coroutine _scrollRoutine;
+        private bool _inventoryButtonBound;
+
+        private const string MapPanelObjectName = "MapPanel";
+        private const string MapPanelResourcePath = "UI/scarlet_stage_map_panel";
 
         private void OnEnable()
         {
             if (_mapData != null || _pendingScrollToAvailable)
                 RequestScrollToAvailableNodes();
+
+            EnsureInventoryButton();
+            RefreshHud();
+        }
+
+        private void OnDisable()
+        {
+            UnbindInventoryButton();
         }
 
         public void BuildMap(StageMapData mapData, Action<int> onNodeClicked, Action onComplete = null)
@@ -66,13 +99,19 @@ namespace SHIN
             }
 
             EnsureScrollRect();
+            EnsureHud();
+            EnsureInventoryButton();
             _mapData = mapData;
             _onNodeClicked = onNodeClicked;
             ClearMapVisuals();
             _onNodeClicked = onNodeClicked;
             UpdateContentSize(mapData);
             SpawnConnectionLines(mapData);
-            SpawnNodeVisualsAsync(mapData, onComplete);
+            SpawnNodeVisualsAsync(mapData, () =>
+            {
+                RefreshHud();
+                onComplete?.Invoke();
+            });
         }
 
         /// <summary>
@@ -108,6 +147,7 @@ namespace SHIN
                 nodeObject.Refresh(node);
             }
 
+            RefreshHud();
             RequestScrollToAvailableNodes();
         }
 
@@ -118,6 +158,166 @@ namespace SHIN
             _mapData = null;
             _pendingScrollToAvailable = false;
             StopScrollRoutine();
+        }
+
+        public void RefreshHud()
+        {
+            EnsureHud();
+            _hud?.Refresh();
+        }
+
+        private void EnsureHud()
+        {
+            if (_hud != null)
+            {
+                _hud.EnsureBuilt(transform);
+                return;
+            }
+
+            _hud = GetComponentInChildren<StageMapHudUI>(true);
+            if (_hud == null)
+            {
+                var hudGo = new GameObject("StageMapHud", typeof(RectTransform));
+                hudGo.transform.SetParent(transform, false);
+                _hud = hudGo.AddComponent<StageMapHudUI>();
+            }
+
+            _hud.EnsureBuilt(transform);
+        }
+
+        public void OnClickInventory()
+        {
+            UIManager uiManager = GameManager.Instance?.UIManager;
+            if (uiManager == null)
+            {
+                Debug.LogError("[StageNodeUI] UIManager가 없습니다.");
+                return;
+            }
+
+            if (uiManager.Current is InventoryUI)
+                return;
+
+            uiManager.Show(PublicVariable.Address.InventoryUIPrefab, uiBase =>
+            {
+                if (uiBase is not InventoryUI inventoryUI)
+                {
+                    Debug.LogError("[StageNodeUI] InventoryUI 컴포넌트가 없습니다.");
+                    return;
+                }
+
+                inventoryUI.Setup();
+            });
+        }
+
+        private void EnsureInventoryButton()
+        {
+            if (_inventoryButton == null)
+            {
+                Transform existing = transform.Find("InventoryButton");
+                GameObject buttonGo;
+                if (existing != null)
+                {
+                    buttonGo = existing.gameObject;
+                }
+                else
+                {
+                    buttonGo = new GameObject("InventoryButton", typeof(RectTransform));
+                    buttonGo.transform.SetParent(transform, false);
+                    buttonGo.AddComponent<Image>();
+                    _inventoryButton = buttonGo.AddComponent<Button>();
+
+                    var labelGo = new GameObject("Label", typeof(RectTransform));
+                    labelGo.transform.SetParent(buttonGo.transform, false);
+                    var label = labelGo.AddComponent<TMPro.TextMeshProUGUI>();
+                    label.text = "인벤토리";
+                    label.fontSize = 20f;
+                    label.alignment = TMPro.TextAlignmentOptions.Center;
+                    label.raycastTarget = false;
+                    UiFont.ApplyNotoSansRegular(label);
+                }
+
+                if (_inventoryButton == null)
+                    _inventoryButton = buttonGo.GetComponent<Button>();
+            }
+
+            if (_inventoryButton == null)
+                return;
+
+            ApplyInventoryButtonLayout(_inventoryButton);
+            _inventoryButton.transform.SetAsLastSibling();
+            BindInventoryButton();
+        }
+
+        private static void ApplyInventoryButtonLayout(Button button)
+        {
+            if (button == null)
+                return;
+
+            RectTransform rect = button.transform as RectTransform;
+            if (rect != null)
+            {
+                rect.anchorMin = new Vector2(1f, 1f);
+                rect.anchorMax = new Vector2(1f, 1f);
+                rect.pivot = new Vector2(1f, 1f);
+                rect.anchoredPosition = new Vector2(-20f, -110f);
+                // 스프라이트 비율에 맞춰 글자와 이미지가 같은 영역에 맞도록 설정
+                rect.sizeDelta = new Vector2(220f, 72f);
+            }
+
+            Image image = button.GetComponent<Image>();
+            if (image != null)
+            {
+                // Preserve Aspect면 Image만 축소되고 Label은 Rect 전체를 써서 글자가 쏠림
+                image.preserveAspect = false;
+                image.type = Image.Type.Simple;
+                image.color = Color.white;
+                Sprite buttonSprite = Resources.Load<Sprite>("UI/scarlet_stage_soft_button");
+                if (buttonSprite != null)
+                    image.sprite = buttonSprite;
+                else if (image.sprite == null)
+                    image.color = new Color(0.95f, 0.72f, 0.82f, 0.95f);
+
+                button.targetGraphic = image;
+            }
+
+            Transform labelTransform = button.transform.Find("Label");
+            if (labelTransform != null)
+            {
+                RectTransform labelRect = labelTransform as RectTransform;
+                if (labelRect != null)
+                {
+                    labelRect.anchorMin = Vector2.zero;
+                    labelRect.anchorMax = Vector2.one;
+                    labelRect.offsetMin = Vector2.zero;
+                    labelRect.offsetMax = Vector2.zero;
+                    labelRect.anchoredPosition = Vector2.zero;
+                }
+
+                var label = labelTransform.GetComponent<TMPro.TextMeshProUGUI>();
+                if (label != null)
+                {
+                    label.alignment = TMPro.TextAlignmentOptions.Center;
+                    label.color = new Color(0.42f, 0.28f, 0.36f, 1f);
+                }
+            }
+        }
+
+        private void BindInventoryButton()
+        {
+            if (_inventoryButton == null || _inventoryButtonBound)
+                return;
+
+            _inventoryButton.onClick.AddListener(OnClickInventory);
+            _inventoryButtonBound = true;
+        }
+
+        private void UnbindInventoryButton()
+        {
+            if (_inventoryButton == null || !_inventoryButtonBound)
+                return;
+
+            _inventoryButton.onClick.RemoveListener(OnClickInventory);
+            _inventoryButtonBound = false;
         }
 
         private void RequestScrollToAvailableNodes()
@@ -187,7 +387,13 @@ namespace SHIN
                 return;
 
             for (int i = _stageNodeRoot.childCount - 1; i >= 0; i--)
-                DestroyImmediateSafe(_stageNodeRoot.GetChild(i).gameObject);
+            {
+                Transform child = _stageNodeRoot.GetChild(i);
+                if (child != null && child.name == MapPanelObjectName)
+                    continue;
+
+                DestroyImmediateSafe(child.gameObject);
+            }
         }
 
         private void EnsureScrollRect()
@@ -208,7 +414,68 @@ namespace SHIN
 
             float width = (mapData.GridX - 1) * _spacingX + _nodeSize.x + _contentPadding * 2f;
             float height = (mapData.GridY - 1) * _spacingY + _nodeSize.y + _contentPadding * 2f;
-            content.sizeDelta = new Vector2(width, height);
+            width += _mapPanelExtraPadding * 2f;
+            height += _mapPanelExtraPadding * 2f
+                + _mapPanelTopOrnamentPadding
+                + _mapPanelBottomOrnamentPadding;
+
+            content.sizeDelta = new Vector2(0f, height);
+
+            RectTransform nodeMain = _stageNodeRoot as RectTransform;
+            if (nodeMain != null)
+            {
+                nodeMain.anchorMin = new Vector2(0.5f, 1f);
+                nodeMain.anchorMax = new Vector2(0.5f, 1f);
+                nodeMain.pivot = new Vector2(0.5f, 0.5f);
+                nodeMain.sizeDelta = new Vector2(width, height);
+                nodeMain.anchoredPosition = new Vector2(0f, -height * 0.5f);
+            }
+
+            EnsureMapPanel();
+        }
+
+        private void EnsureMapPanel()
+        {
+            if (_stageNodeRoot == null)
+                return;
+
+            if (_mapPanelImage == null)
+            {
+                Transform existing = _stageNodeRoot.Find(MapPanelObjectName);
+                if (existing != null)
+                    _mapPanelImage = existing.GetComponent<Image>();
+            }
+
+            if (_mapPanelImage == null)
+            {
+                var go = new GameObject(MapPanelObjectName, typeof(RectTransform), typeof(CanvasRenderer));
+                go.transform.SetParent(_stageNodeRoot, false);
+                _mapPanelImage = go.AddComponent<Image>();
+            }
+
+            RectTransform panelRect = _mapPanelImage.transform as RectTransform;
+            if (panelRect != null)
+            {
+                panelRect.anchorMin = Vector2.zero;
+                panelRect.anchorMax = Vector2.one;
+                panelRect.offsetMin = Vector2.zero;
+                panelRect.offsetMax = Vector2.zero;
+                panelRect.localScale = Vector3.one;
+                panelRect.SetAsFirstSibling();
+            }
+
+            if (_mapPanelImage.sprite == null)
+            {
+                Sprite panelSprite = Resources.Load<Sprite>(MapPanelResourcePath);
+                if (panelSprite != null)
+                    _mapPanelImage.sprite = panelSprite;
+            }
+
+            _mapPanelImage.type = Image.Type.Sliced;
+            _mapPanelImage.preserveAspect = false;
+            _mapPanelImage.color = Color.white;
+            _mapPanelImage.raycastTarget = false;
+            _mapPanelImage.enabled = _mapPanelImage.sprite != null;
         }
 
         private RectTransform ResolveContentRect()
@@ -372,7 +639,13 @@ namespace SHIN
             rect.anchorMax = Vector2.one;
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
-            rect.SetAsFirstSibling();
+
+            // MapPanel(0) 바로 위, 노드보다 아래
+            EnsureMapPanel();
+            int insertIndex = 0;
+            if (_mapPanelImage != null && _mapPanelImage.transform.parent == _stageNodeRoot)
+                insertIndex = _mapPanelImage.transform.GetSiblingIndex() + 1;
+            go.transform.SetSiblingIndex(insertIndex);
 
             _lineRoot = go.transform;
             return _lineRoot;
@@ -416,7 +689,9 @@ namespace SHIN
         {
             float width = (mapData.GridX - 1) * _spacingX;
             float height = (mapData.GridY - 1) * _spacingY;
-            return new Vector2(-width * 0.5f, -height * 0.5f);
+            // 상단/하단 장식 여백만큼 그리드 중심을 보정
+            float yShift = (_mapPanelBottomOrnamentPadding - _mapPanelTopOrnamentPadding) * 0.5f;
+            return new Vector2(-width * 0.5f, -height * 0.5f + yShift);
         }
 
         private Vector2 GetNodePosition(StageNodeData node, Vector2 origin)

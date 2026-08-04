@@ -1,36 +1,15 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace SHIN
 {
     /// <summary>
     /// 캐릭터 선택 화면용 3D 모델.
-    /// InitializeModel에서 lilToon 등장 디졸브를 재생합니다.
     /// </summary>
     public class CharacterSelectModel : MonoBehaviour
     {
-        [Header("Appear Dissolve")]
-        [SerializeField]
-        private Color _appearDissolveEdgeColor = new Color(2.2f, 0.85f, 0.25f, 1f);
-
-        [SerializeField]
-        [Range(0f, 1f)]
-        private float _appearDissolveNoiseStrength = 0.7f;
-
-        [SerializeField]
-        private float _appearDissolveBlur = 0.18f;
-
-        [SerializeField]
-        private Texture _appearDissolveNoise;
-
         private CharacterSelectData _data;
-        private readonly List<Material> _dissolveMaterials = new();
-        private bool _dissolvePrepared;
-        private Coroutine _appearRoutine;
 
         public CharacterSelectData Data => _data;
-        public bool IsAppearing => _appearRoutine != null;
 
         /// <summary>보이스/유닛 공통 TID. CharacterSelectData.UnitDataSOTid (== UnitData.unitTid).</summary>
         public string UnitTid => _data?.UnitDataSOTid;
@@ -117,175 +96,11 @@ namespace SHIN
             HideWeaponPreview();
         }
 
-        /// <summary>
-        /// 표시용 초기화. 등장 디졸브(완전 소멸 → 나타남)를 재생합니다.
-        /// duration은 CharacterSelectObject.Appear Dissolve Duration에서 전달합니다.
-        /// </summary>
-        public void InitializeModel(float dissolveDuration)
+        /// <summary>표시용 초기화. 모델을 즉시 켠다.</summary>
+        public void InitializeModel()
         {
-            float duration = Mathf.Max(0.01f, dissolveDuration);
-
             if (!gameObject.activeSelf)
                 gameObject.SetActive(true);
-
-            if (!isActiveAndEnabled)
-            {
-                Debug.LogWarning($"[CharacterSelectModel] InitializeModel 실패(비활성): {name}");
-                return;
-            }
-
-            if (_appearRoutine != null)
-            {
-                StopCoroutine(_appearRoutine);
-                _appearRoutine = null;
-            }
-
-            _appearRoutine = StartCoroutine(AppearDissolveRoutine(duration));
-        }
-
-        /// <summary>진행 중인 등장 디졸브를 중단하고 완전히 보이게 둡니다.</summary>
-        public void StopAppearDissolve(bool showFully = true)
-        {
-            if (_appearRoutine != null)
-            {
-                StopCoroutine(_appearRoutine);
-                _appearRoutine = null;
-            }
-
-            if (showFully && _dissolvePrepared)
-            {
-                ApplyDissolveAmount(0f);
-                for (int i = 0; i < _dissolveMaterials.Count; i++)
-                    LilToonDissolveUtility.SetInvisible(_dissolveMaterials[i], false);
-            }
-        }
-
-        private IEnumerator AppearDissolveRoutine(float durationSeconds)
-        {
-            float duration = Mathf.Max(0.01f, durationSeconds);
-
-            if (!EnsureDissolveMaterials())
-            {
-                _appearRoutine = null;
-                yield break;
-            }
-
-            // 1 = 안 보임 → 0 = 완전 표시
-            ApplyDissolveAmount(1f);
-            for (int i = 0; i < _dissolveMaterials.Count; i++)
-                LilToonDissolveUtility.SetInvisible(_dissolveMaterials[i], false);
-
-            // 한 프레임 반영 후 진행 (duration은 인자로 고정)
-            yield return null;
-
-            float elapsed = 0f;
-            while (elapsed < duration)
-            {
-                // UI 연출이라 timescale/히트스톱에 영향받지 않음
-                elapsed += Time.unscaledDeltaTime;
-                float t = Mathf.Clamp01(elapsed / duration);
-                ApplyDissolveAmount(1f - t);
-                yield return null;
-            }
-
-            ApplyDissolveAmount(0f);
-            _appearRoutine = null;
-        }
-
-        private bool EnsureDissolveMaterials()
-        {
-            if (_dissolvePrepared && _dissolveMaterials.Count > 0)
-            {
-                // 인스턴스가 파괴됐으면 다시 수집
-                for (int i = _dissolveMaterials.Count - 1; i >= 0; i--)
-                {
-                    if (_dissolveMaterials[i] == null)
-                        _dissolveMaterials.RemoveAt(i);
-                }
-
-                if (_dissolveMaterials.Count > 0)
-                    return true;
-
-                _dissolvePrepared = false;
-            }
-
-            _dissolveMaterials.Clear();
-
-            var renderers = GetComponentsInChildren<Renderer>(true);
-            for (int r = 0; r < renderers.Length; r++)
-            {
-                var renderer = renderers[r];
-                if (renderer == null || renderer is ParticleSystemRenderer)
-                    continue;
-
-                var mats = renderer.materials;
-                bool anyPrepared = false;
-
-                for (int i = 0; i < mats.Length; i++)
-                {
-                    var mat = mats[i];
-                    if (mat == null)
-                        continue;
-
-                    if (!LilToonDissolveUtility.IsLilToonMaterial(mat))
-                        continue;
-
-                    if (LilToonDissolveUtility.PrepareForDissolve(
-                            mat,
-                            _appearDissolveEdgeColor,
-                            _appearDissolveNoiseStrength,
-                            _appearDissolveNoise))
-                    {
-                        _dissolveMaterials.Add(mat);
-                        anyPrepared = true;
-                    }
-                }
-
-                if (anyPrepared)
-                    renderer.materials = mats;
-            }
-
-            _dissolvePrepared = _dissolveMaterials.Count > 0;
-            if (!_dissolvePrepared)
-                Debug.LogWarning($"[CharacterSelectModel] lilToon Dissolve 머티리얼 없음: {name}");
-
-            return _dissolvePrepared;
-        }
-
-        private void ApplyDissolveAmount(float amount01)
-        {
-            amount01 = Mathf.Clamp01(amount01);
-            for (int i = 0; i < _dissolveMaterials.Count; i++)
-            {
-                if (_dissolveMaterials[i] != null)
-                    LilToonDissolveUtility.SetDissolveAmount(
-                        _dissolveMaterials[i],
-                        amount01,
-                        _appearDissolveBlur);
-            }
-        }
-
-        private void OnDisable()
-        {
-            if (_appearRoutine != null)
-            {
-                StopCoroutine(_appearRoutine);
-                _appearRoutine = null;
-            }
-        }
-
-        private void OnDestroy()
-        {
-            StopAppearDissolve(showFully: false);
-
-            for (int i = 0; i < _dissolveMaterials.Count; i++)
-            {
-                if (_dissolveMaterials[i] != null)
-                    Destroy(_dissolveMaterials[i]);
-            }
-
-            _dissolveMaterials.Clear();
-            _dissolvePrepared = false;
         }
     }
 }

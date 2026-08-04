@@ -20,6 +20,7 @@ namespace SHIN
             public const string WeaponDataSO = "Assets/Addressables/SO/WeaponDataSO.asset";
             public const string BGMDataSO = "Assets/Addressables/SO/BGMDataSO.asset";
             public const string CardObjectPrefab = "Assets/Addressables/Prefab/UI/Card/CardObject.prefab";
+            public const string CardFrameSprite = "Assets/Art/Image/Card/scarlet_draw_card_frame.png";
             public const string PlayerUIPrefab = "Assets/Addressables/Prefab/UI/PlayerUI.prefab";
             public const string StageNodeUIPrefab = "Assets/Addressables/Prefab/UI/Stage/StageNodeUI.prefab";
             public const string StageNodeObjectUIPrefab = "Assets/Addressables/Prefab/UI/Stage/StageNodeObjectUI.prefab";
@@ -47,12 +48,19 @@ namespace SHIN
                 "Assets/Addressables/Prefab/UI/StageShop/StageShopUI.prefab";
             public const string StageShopUIObjectPrefab =
                 "Assets/Addressables/Prefab/UI/StageShop/StageShopUIObject.prefab";
+            public const string InventoryUIPrefab =
+                "Assets/Addressables/Prefab/UI/InventoryUI.prefab";
+            public const string NotoSansKrRegularFont =
+                "Assets/Addressables/Font/NotoSansKR-Regular SDF.asset";
             public const string EndingSequenceUIPrefab =
                 "Assets/Addressables/Prefab/UI/EndingSequenceUI.prefab";
             public const string FadeUIPrefab =
                 "Assets/Addressables/Prefab/UI/FadeUI.prefab";
             public const string UiButtonClickSe =
                 "Assets/Addressables/Sound/UI/Button/button_click_001.wav";
+            /// <summary>플레이어 카드 드로우 SE</summary>
+            public const string SeCardDraw =
+                "Assets/Addressables/Sound/SE/Card/se_card_drow_001.ogg";
             /// <summary>타이틀(인트로) BGM. BGMDataSO의 Intro와 동일 경로를 유지한다.</summary>
             public const string BgmIntro =
                 "Assets/Addressables/Sound/BGM/bgm_intro_001.ogg";
@@ -61,6 +69,9 @@ namespace SHIN
                 "Assets/Addressables/Sound/Voice/";
             public const string DefaultHitEffectPrefab =
                 "Assets/Addressables/Prefab/Effect/Unit/Sword/effect_sword_slash_hit_001.prefab";
+            /// <summary>카드 HitSoundPath가 비어 있을 때 사용하는 기본 히트 SE</summary>
+            public const string DefaultHitSe =
+                "Assets/Addressables/Sound/SE/Weapon/Sword/se_sword_hit_001.mp3";
             public const string UIAtlas = "Assets/Addressables/Atlas/UIAtlas.spriteatlasv2";
             public const string PlayerAnimatorSword =
                 "Assets/Addressables/Animator/Player/PlayerAnimator_Sword.controller";

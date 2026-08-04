@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -16,9 +17,26 @@ namespace SHIN
         [SerializeField]
         private WeaponSelectUI _weaponSelectUI;
 
+        [Header("Stage Transition")]
+        [SerializeField]
+        [Min(0.01f)]
+        [Tooltip("선택 화면 → 검정으로 FadeOut 시간(초)")]
+        private float _stageCoverFadeOutDuration = 0.6f;
+
+        [SerializeField]
+        [Min(0f)]
+        [Tooltip("완전히 가린 뒤 StageUI 준비 전 대기(초). 보이스 재생 여유 등")]
+        private float _postCoverHoldDuration = 1.5f;
+
+        [SerializeField]
+        [Min(0.01f)]
+        [Tooltip("StageUI 공개 시 FadeIn 시간(초). FadeUI 기본값 대신 이 값을 씀")]
+        private float _stageRevealFadeInDuration = 0.5f;
+
         private CharacterSelectData _selectedCharacter;
         private WeaponData _selectedWeapon;
         private bool _isSaving;
+        private Coroutine _stageTransitionRoutine;
 
         /// <summary>슬롯 미리보기용. CharacterSelectObject 모델 갱신 등에 사용.</summary>
         public event Action<CharacterSelectData> OnCharacterPreviewChanged;
@@ -101,7 +119,7 @@ namespace SHIN
             if (data == null)
                 return;
 
-            // 이미 선택된 캐릭터면 모델 갱신/디졸브 재재생하지 않음
+            // 이미 선택된 캐릭터면 모델 갱신하지 않음
             if (IsSameCharacter(_selectedCharacter, data))
                 return;
 
@@ -233,12 +251,49 @@ namespace SHIN
 
             _isSaving = true;
 
-            // StageNodeUI 전환 전 즉시 가림 → 맵 준비 후 SignalContentReady로 페이드인
+            PlayCharacterSelectEndVoice(unitTid);
+
+            // FadeOut 완료 → 홀드 → Stage 준비 → SignalContentReady로 페이드인
             UIManager uiManager = gameManager.UIManager;
             if (uiManager != null)
-                uiManager.BeginFadeCover(() => CommitPlayerSetup(gameManager, unitTid));
+            {
+                uiManager.SetFadeOutDuration(_stageCoverFadeOutDuration);
+                uiManager.BeginFadeOutCover(() =>
+                {
+                    uiManager.SetFadeInDuration(_stageRevealFadeInDuration);
+                    if (_stageTransitionRoutine != null)
+                        StopCoroutine(_stageTransitionRoutine);
+                    _stageTransitionRoutine = StartCoroutine(
+                        CommitPlayerSetupAfterHold(gameManager, unitTid));
+                });
+            }
             else
+            {
                 CommitPlayerSetup(gameManager, unitTid);
+            }
+        }
+
+        private IEnumerator CommitPlayerSetupAfterHold(GameManager gameManager, string unitTid)
+        {
+            if (_postCoverHoldDuration > 0f)
+                yield return new WaitForSecondsRealtime(_postCoverHoldDuration);
+
+            _stageTransitionRoutine = null;
+            CommitPlayerSetup(gameManager, unitTid);
+        }
+
+        private static void PlayCharacterSelectEndVoice(string unitTid)
+        {
+            SoundManager soundManager = GameManager.Instance?.SoundManager;
+            if (soundManager == null)
+            {
+                Debug.LogWarning("[UnitSetupUI] SoundManager가 없어 선택 완료 보이스를 재생할 수 없습니다.");
+                return;
+            }
+
+            string path =
+                $"{PublicVariable.Address.VoiceRoot}{unitTid}/character_select_end_001.wav";
+            soundManager.PlayVoice(path);
         }
 
         private void CommitPlayerSetup(GameManager gameManager, string unitTid)

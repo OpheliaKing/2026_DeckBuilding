@@ -1,11 +1,16 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace SHIN
 {
     public class InGamePlayerUI : MonoBehaviour
     {
+        private static readonly Color TextCream = new Color(0.98f, 0.93f, 0.86f, 1f);
+        private static readonly Color AccentScarlet = new Color(0.95f, 0.25f, 0.35f, 1f);
+
         [SerializeField]
         private Transform _handCardParent;
 
@@ -13,7 +18,7 @@ namespace SHIN
         private float _handCardSpacing = 180f;
 
         [SerializeField]
-        private float _handCardRightPadding = 20f;
+        private float _handCardRightPadding = 36f;
 
         [Header("Draw Animation")]
         [SerializeField]
@@ -28,9 +33,32 @@ namespace SHIN
         [Tooltip("드로우 시작 X 오프셋(목표 위치 기준, 오른쪽). Y는 목표와 동일하게 고정")]
         private float _drawSpawnOffsetX = 220f;
 
+        [Header("HUD (Prefab)")]
+        [SerializeField]
+        private Image _costBadgeImage;
+
+        [SerializeField]
+        private TextMeshProUGUI _costText;
+
+        [SerializeField]
+        private TextMeshProUGUI _deckCountText;
+
+        [SerializeField]
+        private TextMeshProUGUI _discardCountText;
+
+        [SerializeField]
+        private TextMeshProUGUI _handCountText;
+
+        [SerializeField]
+        private TextMeshProUGUI _costWarningText;
+
+        [SerializeField]
+        private Button _endTurnButton;
+
         private UnitInfo _currentUnitInfo;
         private readonly List<GameObject> _handCardObjects = new();
         private int _refreshVersion;
+        private float _costWarningHideAt;
 
         /// <summary>
         /// Addressables 생성 직후 한 프레임 노출을 막기 위한 비활성 부모.
@@ -39,6 +67,28 @@ namespace SHIN
 
         public Transform HandCardParent => _handCardParent;
         public UnitInfo CurrentUnitInfo => _currentUnitInfo;
+
+        private void Awake()
+        {
+            if (_endTurnButton == null)
+                _endTurnButton = GetComponentInChildren<Button>(true);
+
+            WireEndTurnButton();
+
+            if (_costWarningText != null)
+                _costWarningText.gameObject.SetActive(false);
+
+            ApplyHudFonts();
+        }
+
+        private void Update()
+        {
+            if (_costWarningText == null || !_costWarningText.gameObject.activeSelf)
+                return;
+
+            if (Time.unscaledTime >= _costWarningHideAt)
+                _costWarningText.gameObject.SetActive(false);
+        }
 
         /// <summary>
         /// 드로우 결과와 현재 손패를 UI에 반영합니다.
@@ -53,6 +103,7 @@ namespace SHIN
             }
 
             _currentUnitInfo = unitInfo;
+            RefreshHud();
             RefreshHandAsync(unitInfo.Hand, sequentialDraw: true);
 
             if (drawnCards == null || drawnCards.Count == 0)
@@ -62,6 +113,18 @@ namespace SHIN
             }
 
             Debug.Log($"[InGamePlayerUI] 드로우 {drawnCards.Count}장 / 손패 {unitInfo.Hand.Count}장");
+        }
+
+        private static void PlayCardDrawSe()
+        {
+            SoundManager soundManager = GameManager.Instance?.SoundManager;
+            if (soundManager == null)
+            {
+                Debug.LogWarning("[InGamePlayerUI] SoundManager가 없어 카드 드로우 SE를 재생할 수 없습니다.");
+                return;
+            }
+
+            soundManager.PlaySe(PublicVariable.Address.SeCardDraw);
         }
 
         public void RefreshHand(IReadOnlyList<CardData> hand)
@@ -78,7 +141,53 @@ namespace SHIN
                 return;
             }
 
+            RefreshHud();
             RefreshHandAsync(hand, sequentialDraw: false);
+        }
+
+        /// <summary>
+        /// 코스트/덱/버림 등 HUD만 갱신합니다.
+        /// </summary>
+        public void RefreshHud()
+        {
+            UnitInfo unit = _currentUnitInfo;
+            int current = unit != null ? unit.CurrentCardCost : 0;
+            int max = unit != null ? unit.MaxCardCost : 0;
+            RefreshCostDisplay(current, max);
+
+            if (_deckCountText != null)
+                _deckCountText.text = $"덱 {unit?.DrawPile?.Count ?? 0}";
+
+            if (_discardCountText != null)
+                _discardCountText.text = $"버림 {unit?.DiscardPile?.Count ?? 0}";
+
+            if (_handCountText != null)
+                _handCountText.text = $"손패 {unit?.Hand?.Count ?? _handCardObjects.Count}";
+        }
+
+        public void RefreshCostUI()
+        {
+            RefreshHud();
+        }
+
+        public void ShowInsufficientCost(int need, int current, int max)
+        {
+            if (_costWarningText == null)
+                return;
+
+            _costWarningText.text = $"코스트 부족  (필요 {need} / 현재 {current}/{max})";
+            _costWarningText.gameObject.SetActive(true);
+            _costWarningHideAt = Time.unscaledTime + 1.6f;
+            RefreshCostDisplay(current, max);
+        }
+
+        private void RefreshCostDisplay(int current, int max)
+        {
+            current = Mathf.Max(0, current);
+            max = Mathf.Max(0, max);
+
+            if (_costText != null)
+                _costText.text = $"{current} / {max}";
         }
 
         private async void RefreshHandAsync(IReadOnlyList<CardData> hand, bool sequentialDraw)
@@ -87,7 +196,10 @@ namespace SHIN
             ClearHandObjects();
 
             if (hand.Count == 0)
+            {
+                RefreshHud();
                 return;
+            }
 
             var resourceManager = GameManager.Instance?.ResourceManager;
             if (resourceManager == null)
@@ -116,7 +228,6 @@ namespace SHIN
                     continue;
                 }
 
-                // 비활성 루트 아래 생성 → 생성 완료 프레임에도 화면에 안 보임
                 GameObject cardObject = await resourceManager.InstantiateAsync(
                     PublicVariable.Address.CardObjectPrefab,
                     _cardSpawnRoot);
@@ -134,7 +245,6 @@ namespace SHIN
                     continue;
                 }
 
-                // 핸드로 옮기기 전에 비활성 유지 (부모 활성 전환 시 노출 방지)
                 cardObject.SetActive(false);
 
                 InGameCardObject cardView = cardObject.GetComponent<InGameCardObject>();
@@ -149,6 +259,9 @@ namespace SHIN
                 }
 
                 cardView.SetData(cardData);
+
+                if (sequentialDraw)
+                    PlayCardDrawSe();
 
                 RectTransform cardRect = cardObject.transform as RectTransform;
                 PrepareCardRect(cardRect);
@@ -168,7 +281,11 @@ namespace SHIN
 
                 if (!await AnimateHandLayoutAsync(visibleCount, version))
                     return;
+
+                RefreshHud();
             }
+
+            RefreshHud();
         }
 
         private void EnsureCardSpawnRoot()
@@ -196,9 +313,6 @@ namespace SHIN
             cardRect.localScale = Vector3.one;
         }
 
-        /// <summary>
-        /// 부모 오른쪽 기준으로 카드를 왼쪽으로 나열합니다. (마지막 카드가 가장 오른쪽)
-        /// </summary>
         private Vector2 GetRightAlignedPosition(RectTransform cardRect, int index, int totalCount)
         {
             if (cardRect == null || totalCount <= 0)
@@ -313,11 +427,9 @@ namespace SHIN
             _refreshVersion++;
             _currentUnitInfo = null;
             ClearHandObjects();
+            RefreshHud();
         }
 
-        /// <summary>
-        /// 사용한 카드 UI만 제거하고, 남은 카드가 빈자리를 채우도록 이동합니다.
-        /// </summary>
         public void RemoveCardFromHand(InGameCardObject cardObject)
         {
             if (cardObject == null)
@@ -349,9 +461,6 @@ namespace SHIN
             RemoveCardAtIndexAndCompact(index);
         }
 
-        /// <summary>
-        /// CardData 참조로 손패 UI에서 첫 매칭 카드를 제거하고 자리를 채웁니다.
-        /// </summary>
         public void RemoveCardFromHand(CardData cardData)
         {
             if (cardData == null)
@@ -362,10 +471,7 @@ namespace SHIN
                 if (_handCardObjects[i] == null)
                     continue;
 
-                InGameCardObject view = _handCardObjects[i].GetComponent<InGameCardObject>();
-                if (view == null)
-                    view = _handCardObjects[i].GetComponentInChildren<InGameCardObject>(true);
-
+                InGameCardObject view = _handCardObjects[i].GetComponentInChildren<InGameCardObject>(true);
                 if (view != null && view.CardData == cardData)
                 {
                     RemoveCardAtIndexAndCompact(i);
@@ -395,6 +501,7 @@ namespace SHIN
 
             int version = ++_refreshVersion;
             CompactHandLayoutAsync(version);
+            RefreshHud();
         }
 
         private async void CompactHandLayoutAsync(int version)
@@ -407,6 +514,9 @@ namespace SHIN
 
         public void SetInteractable(bool interactable)
         {
+            if (_endTurnButton != null)
+                _endTurnButton.interactable = interactable;
+
             for (int i = 0; i < _handCardObjects.Count; i++)
             {
                 if (_handCardObjects[i] == null)
@@ -423,12 +533,50 @@ namespace SHIN
         public void SetVisible(bool visible)
         {
             gameObject.SetActive(visible);
+            if (visible)
+                RefreshHud();
         }
 
         private void OnDestroy()
         {
             _refreshVersion++;
             ClearHandObjects();
+        }
+
+        private void WireEndTurnButton()
+        {
+            if (_endTurnButton == null)
+                return;
+
+            _endTurnButton.onClick.RemoveListener(OnClickEndTurn);
+            _endTurnButton.onClick.AddListener(OnClickEndTurn);
+        }
+
+        private void OnClickEndTurn()
+        {
+            var inGame = GameManager.Instance?.InGameManager;
+            if (inGame == null)
+            {
+                Debug.LogError("[InGamePlayerUI] InGameManager가 없습니다.");
+                return;
+            }
+
+            inGame.EndTurn();
+        }
+
+        private void ApplyHudFonts()
+        {
+            UiFont.ApplyNotoSansRegular(_costText);
+            UiFont.ApplyNotoSansRegular(_deckCountText);
+            UiFont.ApplyNotoSansRegular(_discardCountText);
+            UiFont.ApplyNotoSansRegular(_handCountText);
+            UiFont.ApplyNotoSansRegular(_costWarningText);
+
+            if (_endTurnButton != null)
+            {
+                TextMeshProUGUI label = _endTurnButton.GetComponentInChildren<TextMeshProUGUI>(true);
+                UiFont.ApplyNotoSansRegular(label);
+            }
         }
     }
 }

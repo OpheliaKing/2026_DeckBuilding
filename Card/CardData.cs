@@ -27,6 +27,14 @@ namespace SHIN
         private int _cost;
         public int Cost => _cost;
 
+        /// <summary>
+        /// 카드 일러스트 Addressables 경로 (Sprite). 비우면 플레이스홀더.
+        /// 권장 해상도: 790×767 (프레임 투명 칸과 동일 비율).
+        /// </summary>
+        [SerializeField]
+        private string _illustrationPath;
+        public string IllustrationPath => _illustrationPath;
+
         [SerializeField]
         private CARD_TYPE _cardType;
         public CARD_TYPE CardType => _cardType;
@@ -55,6 +63,21 @@ namespace SHIN
         [SerializeField]
         private string _hitEffectPath;
         public string HitEffectPath => _hitEffectPath;
+
+        /// <summary>
+        /// 히트 판정 시 재생할 SE 경로. 비우면 DefaultHitSe 사용.
+        /// </summary>
+        [SerializeField]
+        private string _hitSoundPath;
+        public string HitSoundPath => _hitSoundPath;
+
+        /// <summary>
+        /// 공격 애니 파티클 오버라이드.
+        /// 비어 있지 않으면 CombatAnimStateBehaviour ParticleCue.ParticleAddress 대신 사용한다.
+        /// </summary>
+        [SerializeField]
+        private string _attackParticlePath;
+        public string AttackParticlePath => _attackParticlePath;
 
         /// <summary>
         /// 공격대상에게 주는 이벤트 목록

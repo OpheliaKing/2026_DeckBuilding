@@ -19,6 +19,19 @@ namespace SHIN
         [SerializeField]
         private Animator _animator;
 
+        [Header("Node State Colors")]
+        [SerializeField]
+        private Color _availableColor = Color.white;
+
+        [SerializeField]
+        private Color _currentColor = new Color(1f, 0.92f, 0.75f, 1f);
+
+        [SerializeField]
+        private Color _visitedColor = new Color(0.96f, 0.9f, 0.98f, 0.78f);
+
+        [SerializeField]
+        private Color _lockedColor = new Color(0.98f, 0.94f, 1f, 0.9f);
+
         private StageNodeData _nodeData;
         private Action<int> _onClicked;
         private int _iconLoadVersion;
@@ -55,6 +68,22 @@ namespace SHIN
         {
             UpdateNodeIconAsync();
             UpdateSelectAbleAnimation();
+            UpdateStateColor();
+        }
+
+        private void UpdateStateColor()
+        {
+            if (_nodeIcon == null || _nodeData == null)
+                return;
+
+            if (_nodeData.IsCurrent)
+                _nodeIcon.color = _currentColor;
+            else if (_nodeData.IsAvailable)
+                _nodeIcon.color = _availableColor;
+            else if (_nodeData.IsVisited)
+                _nodeIcon.color = _visitedColor;
+            else
+                _nodeIcon.color = _lockedColor;
         }
 
         private void UpdateSelectAbleAnimation()
@@ -92,7 +121,10 @@ namespace SHIN
                 return;
 
             if (_nodeIcon != null)
+            {
                 _nodeIcon.sprite = sprite;
+                UpdateStateColor();
+            }
         }
     }
 }

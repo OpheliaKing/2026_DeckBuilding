@@ -24,12 +24,6 @@ namespace SHIN
         [Tooltip("무기 선택 UI용 Virtual Camera")]
         private CinemachineVirtualCamera _weaponSelectCamera;
 
-        [Header("Appear Dissolve")]
-        [SerializeField]
-        [Min(0.01f)]
-        [Tooltip("캐릭터 모델 등장 디졸브가 끝나는 시간(초). CharacterSelectObject에서 조절")]
-        private float _appearDissolveDuration = 1.2f;
-
         private CharacterSelectDataSO _dataSO;
         private CharacterSelectData _selectedData;
         private UnitSetupUI _unitSetupUI;
@@ -281,16 +275,12 @@ namespace SHIN
                 return;
             }
 
-            // 같은 모델이 이미 보여도 등장 디졸브를 다시 재생(시간 조절 테스트 포함)
+            // 같은 모델이 이미 보이면 유지
             if (_currentModelKey == cacheKey &&
                 _modelCache.TryGetValue(cacheKey, out CachedModel current) &&
                 current.GameObject != null &&
                 current.GameObject.activeSelf)
-            {
-                if (current.Model != null)
-                    current.Model.InitializeModel(_appearDissolveDuration);
                 return;
-            }
 
             if (_modelCache.TryGetValue(cacheKey, out CachedModel cached) && cached.GameObject != null)
             {
@@ -396,15 +386,11 @@ namespace SHIN
                     continue;
 
                 if (!shouldActive && pair.Value.Model != null)
-                {
-                    pair.Value.Model.StopAppearDissolve(showFully: true);
                     pair.Value.Model.HideWeaponPreview();
-                }
 
                 pair.Value.GameObject.SetActive(shouldActive);
             }
 
-            // 타겟은 항상 켠 뒤 디졸브 (이미 활성이어도 InitializeModel에서 재생)
             if (!target.GameObject.activeSelf)
                 target.GameObject.SetActive(true);
 
@@ -412,7 +398,7 @@ namespace SHIN
             _currentModel = target.Model;
 
             if (_currentModel != null)
-                _currentModel.InitializeModel(_appearDissolveDuration);
+                _currentModel.InitializeModel();
         }
 
         private void HideAllCachedModels()

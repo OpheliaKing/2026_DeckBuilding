@@ -93,6 +93,18 @@ namespace SHIN
         public StageMapData MapData => _mapData;
         public int CurrentStepIndex => _currentStepIndex;
 
+        /// <summary>스테이지 스텝 최대값. SO 미설정 시 현재 스텝 이상.</summary>
+        public int MaxStepIndex
+        {
+            get
+            {
+                if (TryGetStageStepDataSO(out StageStepDataSO stepSO) && stepSO.MaxStepIndex > 0)
+                    return stepSO.MaxStepIndex;
+
+                return Mathf.Max(1, _currentStepIndex);
+            }
+        }
+
         #endregion
 
         #region Fields
@@ -813,6 +825,7 @@ namespace SHIN
 
             SetStageNodeUIVisible(true);
             _stageNodeUI.ApplyMapProgress(_mapData);
+            _stageNodeUI.RefreshHud();
         }
 
         private void SetStageNodeUIVisible(bool visible)

@@ -50,6 +50,8 @@ namespace SHIN
         private List<string> _preloadSePaths = new()
         {
             PublicVariable.Address.UiButtonClickSe,
+            PublicVariable.Address.SeCardDraw,
+            PublicVariable.Address.DefaultHitSe,
         };
 
         private readonly Dictionary<string, AudioClip> _clipCache = new();

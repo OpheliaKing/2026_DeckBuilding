@@ -28,6 +28,20 @@ namespace SHIN
         /// <summary>일반 UI를 붙일 Canvas 루트. FadeUI 오버레이 Canvas는 제외한다.</summary>
         public Transform UIRoot => ResolveUIRoot();
 
+        /// <summary>다음 FadeIn(가림 해제) 시간(초). FadeUI가 있을 때만 적용.</summary>
+        public void SetFadeInDuration(float seconds)
+        {
+            if (_fadeUI != null)
+                _fadeUI.SetFadeInDuration(seconds);
+        }
+
+        /// <summary>FadeOut(천천히 가림) 시간(초).</summary>
+        public void SetFadeOutDuration(float seconds)
+        {
+            if (_fadeUI != null)
+                _fadeUI.SetFadeOutDuration(seconds);
+        }
+
         public void Show(string address)
         {
             Show(address, null, useFade: false);
@@ -105,6 +119,41 @@ namespace SHIN
                 _waitingContentReadyForFade = true;
                 onCoverReady?.Invoke();
             });
+        }
+
+        /// <summary>
+        /// 화면을 천천히 검게(FadeOut) 가린다. 완료 후에만 onCoverReady를 호출한다.
+        /// 이후 콘텐츠 준비 → SignalContentReady()로 페이드인.
+        /// </summary>
+        public void BeginFadeOutCover(Action onCoverReady = null)
+        {
+            void StartFadeOut(FadeUI fade)
+            {
+                if (fade == null)
+                {
+                    Debug.LogWarning("[UIManager] FadeUI 생성 실패 → 커버 없이 진행");
+                    _waitingContentReadyForFade = false;
+                    onCoverReady?.Invoke();
+                    return;
+                }
+
+                BringFadeToFront();
+                // FadeOut 중에도 새 UI가 노출되지 않도록 대기 플래그를 먼저 켠다
+                _waitingContentReadyForFade = true;
+                fade.FadeOut(() =>
+                {
+                    BringFadeToFront();
+                    onCoverReady?.Invoke();
+                });
+            }
+
+            if (_fadeUI != null)
+            {
+                StartFadeOut(_fadeUI);
+                return;
+            }
+
+            EnsureFadeUI(StartFadeOut);
         }
 
         /// <summary>
@@ -352,7 +401,8 @@ namespace SHIN
 
         private void PushUI(string address, UIBase ui, GameObject uiObject)
         {
-            if (_uiStack.Count > 0)
+            // Screen만 이전 UI를 숨긴다. Popup은 아래 화면을 유지한다.
+            if (_uiStack.Count > 0 && ui != null && ui.UiType != UI_TYPE.Popup)
                 _uiStack.Peek().SetVisible(false);
 
             var entry = new UIStackEntry(address, ui, uiObject);
@@ -394,7 +444,13 @@ namespace SHIN
                 return _uiRoot;
 
             if (_canvasRoot != null)
-                return _canvasRoot;
+            {
+                // BootCover가 잘못 캐시됐거나 Destroy로 무효화된 경우
+                if (_canvasRoot.GetComponent<BootCover>() != null)
+                    _canvasRoot = null;
+                else
+                    return _canvasRoot;
+            }
 
             Canvas canvas = FindMainCanvas();
             if (canvas == null)
@@ -408,7 +464,7 @@ namespace SHIN
         }
 
         /// <summary>
-        /// FadeUI 등 오버레이용 Canvas를 제외한 메인 Canvas를 찾는다.
+        /// FadeUI / BootCover 등 오버레이용 Canvas를 제외한 메인 Canvas를 찾는다.
         /// </summary>
         private static Canvas FindMainCanvas()
         {
@@ -418,10 +474,15 @@ namespace SHIN
             for (int i = 0; i < canvases.Length; i++)
             {
                 Canvas canvas = canvases[i];
-                if (canvas == null)
+                if (canvas == null || !canvas.gameObject.activeInHierarchy)
                     continue;
 
+                // 부트 커버·페이드 오버레이는 UI 부모로 쓰지 않는다
+                if (canvas.GetComponent<BootCover>() != null)
+                    continue;
                 if (canvas.GetComponent<FadeUI>() != null)
+                    continue;
+                if (canvas.overrideSorting && canvas.sortingOrder >= 30000)
                     continue;
 
                 if (fallback == null)

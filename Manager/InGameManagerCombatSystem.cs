@@ -20,6 +20,20 @@ namespace SHIN
         public bool IsResolvingCard => _isResolvingCard;
         public bool IsBattleEnded => _isBattleEnded;
 
+        /// <summary>
+        /// 현재 카드 해석 중인 유저의 CardData. 파티클 오버라이드 등에 사용.
+        /// </summary>
+        public CardData GetResolvingCard(CharacterBase user)
+        {
+            if (_resolveSession == null || user == null)
+                return null;
+
+            if (_resolveSession.User != user)
+                return null;
+
+            return _resolveSession.Card;
+        }
+
         private sealed class CardResolveSession
         {
             public CharacterBase User;
@@ -116,8 +130,7 @@ namespace SHIN
             Debug.LogWarning(
                 $"[Combat] 코스트 부족: {card?.Name} / 필요:{need} / 현재:{current}/{max}");
 
-            // TODO: 코스트 부족 UI 출력
-            // PlayerUI?.ShowInsufficientCost(need, current, max);
+            PlayerUI?.ShowInsufficientCost(need, current, max);
         }
 
         private void BeginTargetSelection(CardData card)
@@ -583,6 +596,12 @@ namespace SHIN
                     ? PublicVariable.Address.DefaultHitEffectPrefab
                     : session.Card.HitEffectPath;
                 session.Target.SpawnHitEffect(hitEffectPath);
+
+                string hitSoundPath = string.IsNullOrEmpty(session.Card.HitSoundPath)
+                    ? PublicVariable.Address.DefaultHitSe
+                    : session.Card.HitSoundPath;
+                if (!string.IsNullOrEmpty(hitSoundPath))
+                    GameManager.Instance?.SoundManager?.PlaySe(hitSoundPath);
             }
 
             int applied = session.Target.TakeDamage(damage);
@@ -697,6 +716,9 @@ namespace SHIN
             }
 
             ConsumePlayedCard(session.User, session.Card, session.PlayedCardObject);
+
+            if (IsPlayerCharacter(session.User))
+                PlayerUI?.RefreshCostUI();
 
             if (session.User != null)
             {

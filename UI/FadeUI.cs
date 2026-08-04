@@ -26,11 +26,23 @@ namespace SHIN
 
         public bool IsFading => _fadeRoutine != null;
         public float Alpha => _canvasGroup != null ? _canvasGroup.alpha : 0f;
+        public float FadeInDuration => _fadeInDuration;
+        public float FadeOutDuration => _fadeOutDuration;
 
         private void Awake()
         {
             EnsureCanvasGroup();
             EnsureTopmostOverlayCanvas();
+        }
+
+        public void SetFadeInDuration(float seconds)
+        {
+            _fadeInDuration = Mathf.Max(0.01f, seconds);
+        }
+
+        public void SetFadeOutDuration(float seconds)
+        {
+            _fadeOutDuration = Mathf.Max(0.01f, seconds);
         }
 
         /// <summary>즉시 불투명(가림). 전환 시작 시 사용.</summary>

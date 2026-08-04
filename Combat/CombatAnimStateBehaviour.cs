@@ -35,7 +35,7 @@ namespace SHIN
             [Tooltip("파티클을 생성할 상태 normalizedTime (0~1)")]
             public float NormalizedTime = 0.5f;
 
-            [Tooltip("Addressables 파티클 프리팹 주소")]
+            [Tooltip("Addressables 파티클 프리팹 주소. 카드 AttackParticlePath가 있으면 그쪽으로 오버라이드된다.")]
             public string ParticleAddress;
 
             [Tooltip("Child: Animator 자식으로 생성 / World: 월드에 독립 생성")]
@@ -187,7 +187,7 @@ namespace SHIN
 
         private void SpawnParticle(Animator animator, ParticleCue cue)
         {
-            if (animator == null || cue == null || string.IsNullOrWhiteSpace(cue.ParticleAddress))
+            if (animator == null || cue == null)
                 return;
 
             if (_character == null)
@@ -195,16 +195,32 @@ namespace SHIN
 
             if (_character == null)
             {
-                Debug.LogWarning($"[CombatAnim] 파티클 스폰용 CharacterBase 없음: {cue.ParticleAddress}");
+                Debug.LogWarning("[CombatAnim] 파티클 스폰용 CharacterBase 없음");
                 return;
             }
 
+            string address = ResolveParticleAddress(cue);
+            if (string.IsNullOrWhiteSpace(address))
+                return;
+
             _character.SpawnParticleEffect(
-                cue.ParticleAddress,
+                address,
                 cue.SpawnSpace,
                 cue.PositionOffset,
                 cue.RotationOffset,
                 animator.transform);
+        }
+
+        /// <summary>
+        /// 카드 AttackParticlePath가 있으면 오버라이드, 없으면 Cue 기본 주소.
+        /// </summary>
+        private string ResolveParticleAddress(ParticleCue cue)
+        {
+            CardData resolvingCard = GameManager.Instance?.InGameManager?.GetResolvingCard(_character);
+            if (resolvingCard != null && !string.IsNullOrWhiteSpace(resolvingCard.AttackParticlePath))
+                return resolvingCard.AttackParticlePath;
+
+            return cue != null ? cue.ParticleAddress : null;
         }
 
         private static CharacterBase ResolveCharacter(Animator animator)

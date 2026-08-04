@@ -199,6 +199,12 @@ namespace SHIN
             // 자동사냥 등: AIType이 AI면 UI 대신 AI 루틴
             if (character.AIType == CHARACTER_AI_TYPE.AI)
             {
+                if (drawnCards != null)
+                {
+                    for (int i = 0; i < drawnCards.Count; i++)
+                        GameManager.Instance?.SoundManager?.PlaySe(PublicVariable.Address.SeCardDraw);
+                }
+
                 SetPlayerUIVisible(false);
                 PlayerUI?.SetInteractable(false);
                 character.StartAITurn();
