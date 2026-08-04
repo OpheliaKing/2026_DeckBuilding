@@ -21,9 +21,14 @@ namespace SHIN
             public const string BGMDataSO = "Assets/Addressables/SO/BGMDataSO.asset";
             public const string CardObjectPrefab = "Assets/Addressables/Prefab/UI/Card/CardObject.prefab";
             public const string CardFrameSprite = "Assets/Art/Image/Card/scarlet_draw_card_frame.png";
+            public const string StageSoftButtonSprite =
+                "Assets/Art/Image/UI/scarlet_stage_soft_button.png";
+            public const string StageMapPanelSprite =
+                "Assets/Art/Image/UI/scarlet_stage_map_panel.png";
             public const string PlayerUIPrefab = "Assets/Addressables/Prefab/UI/PlayerUI.prefab";
             public const string StageNodeUIPrefab = "Assets/Addressables/Prefab/UI/Stage/StageNodeUI.prefab";
             public const string StageNodeObjectUIPrefab = "Assets/Addressables/Prefab/UI/Stage/StageNodeObjectUI.prefab";
+            public const string StageMapHudPrefab = "Assets/Addressables/Prefab/UI/Stage/StageMapHud.prefab";
             public const string StartUIPrefab =
                 "Assets/Addressables/Prefab/UI/StartUI.prefab";
             public const string CharacterSelectObjectPrefab =
@@ -52,6 +57,12 @@ namespace SHIN
                 "Assets/Addressables/Prefab/UI/InventoryUI.prefab";
             public const string NotoSansKrRegularFont =
                 "Assets/Addressables/Font/NotoSansKR-Regular SDF.asset";
+            public const string GowunBatangRegularFont =
+                "Assets/Addressables/Font/GowunBatang-Regular SDF.asset";
+            public const string GowunBatangBoldFont =
+                "Assets/Addressables/Font/GowunBatang-Bold SDF.asset";
+            public const string GowunDodumRegularFont =
+                "Assets/Addressables/Font/GowunDodum-Regular SDF.asset";
             public const string EndingSequenceUIPrefab =
                 "Assets/Addressables/Prefab/UI/EndingSequenceUI.prefab";
             public const string FadeUIPrefab =

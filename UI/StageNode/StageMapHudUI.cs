@@ -34,6 +34,12 @@ namespace SHIN
 
         private int _portraitLoadVersion;
         private string _lastPortraitKey;
+        private bool _fontsApplied;
+
+        private void Awake()
+        {
+            ApplyFonts();
+        }
 
         public void EnsureBuilt(Transform parent)
         {
@@ -43,13 +49,14 @@ namespace SHIN
             if (transform.parent != parent)
                 transform.SetParent(parent, false);
 
-            EnsureLayout();
+            ApplyRootRect();
+            ApplyFonts();
             transform.SetAsLastSibling();
         }
 
         public void Refresh()
         {
-            EnsureLayout();
+            ApplyFonts();
 
             GameManager gameManager = GameManager.Instance;
             UnitInfo player = GetPrimaryPlayer(gameManager);
@@ -88,6 +95,32 @@ namespace SHIN
             }
 
             UpdatePortraitAsync(player);
+        }
+
+        private void ApplyRootRect()
+        {
+            RectTransform root = transform as RectTransform;
+            if (root == null)
+                return;
+
+            root.anchorMin = new Vector2(0f, 1f);
+            root.anchorMax = new Vector2(1f, 1f);
+            root.pivot = new Vector2(0.5f, 1f);
+            root.anchoredPosition = Vector2.zero;
+            root.sizeDelta = new Vector2(0f, 108f);
+        }
+
+        private void ApplyFonts()
+        {
+            if (_fontsApplied)
+                return;
+
+            UiFont.ApplyBody(_nameText);
+            UiFont.ApplyBody(_hpText);
+            UiFont.ApplyBody(_goldText);
+            UiFont.ApplyBody(_stepText);
+            UiFont.ApplyBody(_deckText);
+            _fontsApplied = true;
         }
 
         private async void UpdatePortraitAsync(UnitInfo player)
@@ -184,151 +217,6 @@ namespace SHIN
                 return null;
 
             return players[0];
-        }
-
-        private void EnsureLayout()
-        {
-            RectTransform root = transform as RectTransform;
-            if (root == null)
-                root = gameObject.AddComponent<RectTransform>();
-
-            root.anchorMin = new Vector2(0f, 1f);
-            root.anchorMax = new Vector2(1f, 1f);
-            root.pivot = new Vector2(0.5f, 1f);
-            root.anchoredPosition = Vector2.zero;
-            root.sizeDelta = new Vector2(0f, 96f);
-            root.offsetMin = new Vector2(0f, root.offsetMin.y);
-            root.offsetMax = new Vector2(0f, root.offsetMax.y);
-
-            if (_backgroundImage == null)
-            {
-                _backgroundImage = GetComponent<Image>();
-                if (_backgroundImage == null)
-                    _backgroundImage = gameObject.AddComponent<Image>();
-                _backgroundImage.color = new Color(1f, 0.92f, 0.95f, 0.78f);
-                _backgroundImage.raycastTarget = false;
-            }
-
-            HorizontalLayoutGroup layout = GetComponent<HorizontalLayoutGroup>();
-            if (layout == null)
-            {
-                layout = gameObject.AddComponent<HorizontalLayoutGroup>();
-                layout.padding = new RectOffset(20, 20, 12, 12);
-                layout.spacing = 18f;
-                layout.childAlignment = TextAnchor.MiddleLeft;
-                layout.childControlWidth = false;
-                layout.childControlHeight = true;
-                layout.childForceExpandWidth = false;
-                layout.childForceExpandHeight = true;
-            }
-
-            if (_portraitImage == null)
-            {
-                var portraitGo = CreateChild("Portrait", out RectTransform portraitRect);
-                portraitRect.sizeDelta = new Vector2(72f, 72f);
-                LayoutElement portraitLayout = portraitGo.AddComponent<LayoutElement>();
-                portraitLayout.preferredWidth = 72f;
-                portraitLayout.preferredHeight = 72f;
-                portraitLayout.minWidth = 72f;
-                portraitLayout.minHeight = 72f;
-                _portraitImage = portraitGo.AddComponent<Image>();
-                _portraitImage.color = Color.white;
-                _portraitImage.preserveAspect = true;
-                _portraitImage.enabled = false;
-            }
-
-            if (_nameText == null || _hpText == null)
-            {
-                var infoGo = CreateChild("PlayerInfo", out RectTransform infoRect);
-                infoRect.sizeDelta = new Vector2(180f, 72f);
-                LayoutElement infoLayout = infoGo.AddComponent<LayoutElement>();
-                infoLayout.preferredWidth = 180f;
-                infoLayout.minWidth = 140f;
-
-                VerticalLayoutGroup infoGroup = infoGo.AddComponent<VerticalLayoutGroup>();
-                infoGroup.childAlignment = TextAnchor.MiddleLeft;
-                infoGroup.childControlHeight = true;
-                infoGroup.childControlWidth = true;
-                infoGroup.childForceExpandHeight = false;
-                infoGroup.childForceExpandWidth = true;
-                infoGroup.spacing = 2f;
-
-                if (_nameText == null)
-                    _nameText = CreateText(infoGo.transform, "NameText", 22f, TextAlignmentOptions.MidlineLeft);
-
-                if (_hpText == null)
-                    _hpText = CreateText(infoGo.transform, "HpText", 18f, TextAlignmentOptions.MidlineLeft);
-            }
-
-            if (_goldText == null)
-            {
-                _goldText = CreateText(transform, "GoldText", 22f, TextAlignmentOptions.MidlineLeft);
-                LayoutElement goldLayout = _goldText.gameObject.AddComponent<LayoutElement>();
-                goldLayout.preferredWidth = 140f;
-                goldLayout.minWidth = 120f;
-            }
-
-            if (_stepText == null)
-            {
-                _stepText = CreateText(transform, "StepText", 22f, TextAlignmentOptions.MidlineLeft);
-                LayoutElement stepLayout = _stepText.gameObject.AddComponent<LayoutElement>();
-                stepLayout.preferredWidth = 140f;
-                stepLayout.minWidth = 120f;
-            }
-
-            if (_deckText == null)
-            {
-                _deckText = CreateText(transform, "DeckText", 20f, TextAlignmentOptions.MidlineLeft);
-                LayoutElement deckLayout = _deckText.gameObject.AddComponent<LayoutElement>();
-                deckLayout.preferredWidth = 180f;
-                deckLayout.minWidth = 140f;
-                deckLayout.flexibleWidth = 1f;
-            }
-        }
-
-        private GameObject CreateChild(string name, out RectTransform rect)
-        {
-            Transform existing = transform.Find(name);
-            if (existing != null)
-            {
-                rect = existing as RectTransform;
-                if (rect == null)
-                    rect = existing.gameObject.AddComponent<RectTransform>();
-                return existing.gameObject;
-            }
-
-            var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(transform, false);
-            rect = go.GetComponent<RectTransform>();
-            return go;
-        }
-
-        private static TextMeshProUGUI CreateText(
-            Transform parent,
-            string name,
-            float fontSize,
-            TextAlignmentOptions alignment)
-        {
-            Transform existing = parent.Find(name);
-            if (existing != null)
-            {
-                TextMeshProUGUI existingText = existing.GetComponent<TextMeshProUGUI>();
-                if (existingText != null)
-                    return existingText;
-            }
-
-            var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-            TextMeshProUGUI text = go.AddComponent<TextMeshProUGUI>();
-            text.fontSize = fontSize;
-            text.alignment = alignment;
-            text.color = new Color(0.42f, 0.28f, 0.36f, 1f);
-            text.raycastTarget = false;
-            text.enableWordWrapping = false;
-            text.overflowMode = TextOverflowModes.Ellipsis;
-            if (TMP_Settings.defaultFontAsset != null)
-                text.font = TMP_Settings.defaultFontAsset;
-            return text;
         }
     }
 }

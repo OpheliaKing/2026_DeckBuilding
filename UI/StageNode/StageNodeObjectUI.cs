@@ -19,22 +19,30 @@ namespace SHIN
         [SerializeField]
         private Animator _animator;
 
-        [Header("Node State Colors")]
+        [Header("Icon Colors")]
         [SerializeField]
-        private Color _availableColor = Color.white;
+        private Color _availableIconColor = Color.white;
 
         [SerializeField]
-        private Color _currentColor = new Color(1f, 0.92f, 0.75f, 1f);
+        private Color _currentIconColor = new Color(1f, 0.93f, 0.72f, 1f);
 
         [SerializeField]
-        private Color _visitedColor = new Color(0.96f, 0.9f, 0.98f, 0.78f);
+        private Color _visitedIconColor = new Color(1f, 0.95f, 0.98f, 0.85f);
 
         [SerializeField]
-        private Color _lockedColor = new Color(0.98f, 0.94f, 1f, 0.9f);
+        private Color _lockedIconColor = new Color(1f, 0.98f, 1f, 1f);
+
+        [Header("Locked Icon Outline")]
+        [SerializeField]
+        private Color _lockedOutlineColor = new Color(1f, 0.96f, 1f, 1f);
+
+        [SerializeField]
+        private Vector2 _lockedOutlineDistance = new Vector2(1.4f, -1.4f);
 
         private StageNodeData _nodeData;
         private Action<int> _onClicked;
         private int _iconLoadVersion;
+        private Outline _iconOutline;
 
         public StageNodeData NodeData => _nodeData;
 
@@ -67,8 +75,27 @@ namespace SHIN
         private void RefreshVisual()
         {
             UpdateNodeIconAsync();
-            UpdateSelectAbleAnimation();
             UpdateStateColor();
+            UpdateSelectAbleAnimation();
+        }
+
+        private void OnEnable()
+        {
+            // Addressables 생성 직후/재활성화 시에도 선택 가능 애니 재적용
+            if (_nodeData != null)
+                UpdateSelectAbleAnimation();
+        }
+
+        private void EnsureIconOutline()
+        {
+            if (_nodeIcon == null)
+                return;
+
+            if (_iconOutline == null)
+                _iconOutline = _nodeIcon.GetComponent<Outline>();
+
+            if (_iconOutline == null)
+                _iconOutline = _nodeIcon.gameObject.AddComponent<Outline>();
         }
 
         private void UpdateStateColor()
@@ -76,14 +103,29 @@ namespace SHIN
             if (_nodeIcon == null || _nodeData == null)
                 return;
 
+            bool isLocked = !_nodeData.IsCurrent && !_nodeData.IsAvailable && !_nodeData.IsVisited;
+
             if (_nodeData.IsCurrent)
-                _nodeIcon.color = _currentColor;
+                _nodeIcon.color = _currentIconColor;
             else if (_nodeData.IsAvailable)
-                _nodeIcon.color = _availableColor;
+                _nodeIcon.color = _availableIconColor;
             else if (_nodeData.IsVisited)
-                _nodeIcon.color = _visitedColor;
+                _nodeIcon.color = _visitedIconColor;
             else
-                _nodeIcon.color = _lockedColor;
+                _nodeIcon.color = _lockedIconColor;
+
+            EnsureIconOutline();
+            if (_iconOutline != null)
+            {
+                // 갈 수 없는 곳은 밝은 아이콘 + 아웃라인으로만 가시성 확보 (노드 색 유지)
+                _iconOutline.enabled = isLocked;
+                if (isLocked)
+                {
+                    _iconOutline.effectColor = _lockedOutlineColor;
+                    _iconOutline.effectDistance = _lockedOutlineDistance;
+                    _iconOutline.useGraphicAlpha = true;
+                }
+            }
         }
 
         private void UpdateSelectAbleAnimation()
@@ -94,8 +136,34 @@ namespace SHIN
             if (_animator == null || _nodeData == null)
                 return;
 
-            string stateName = _nodeData.IsAvailable ? AnimSelectAble : AnimNone;
-            _animator.Play(stateName, 0, 0f);
+            if (!_animator.isActiveAndEnabled)
+                _animator.enabled = true;
+
+            _animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+
+            if (_nodeData.IsAvailable)
+            {
+                AnimatorStateInfo state = _animator.GetCurrentAnimatorStateInfo(0);
+                // 이미 재생 중이면 재시작하지 않아 펄스가 끊기지 않게 유지
+                if (!state.IsName(AnimSelectAble))
+                {
+                    _animator.Play(AnimSelectAble, 0, 0f);
+                    _animator.Update(0f);
+                }
+            }
+            else
+            {
+                _animator.Play(AnimNone, 0, 0f);
+                _animator.Update(0f);
+                ResetModelScale();
+            }
+        }
+
+        private void ResetModelScale()
+        {
+            Transform model = transform.Find("Model");
+            if (model != null)
+                model.localScale = Vector3.one;
         }
 
         private async void UpdateNodeIconAsync()

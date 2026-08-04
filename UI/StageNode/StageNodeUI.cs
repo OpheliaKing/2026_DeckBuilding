@@ -64,9 +64,9 @@ namespace SHIN
         private bool _pendingScrollToAvailable;
         private Coroutine _scrollRoutine;
         private bool _inventoryButtonBound;
+        private bool _hudSpawning;
 
         private const string MapPanelObjectName = "MapPanel";
-        private const string MapPanelResourcePath = "UI/scarlet_stage_map_panel";
 
         private void OnEnable()
         {
@@ -175,14 +175,59 @@ namespace SHIN
             }
 
             _hud = GetComponentInChildren<StageMapHudUI>(true);
-            if (_hud == null)
+            if (_hud != null)
             {
-                var hudGo = new GameObject("StageMapHud", typeof(RectTransform));
-                hudGo.transform.SetParent(transform, false);
-                _hud = hudGo.AddComponent<StageMapHudUI>();
+                _hud.EnsureBuilt(transform);
+                return;
             }
 
-            _hud.EnsureBuilt(transform);
+            if (_hudSpawning)
+                return;
+
+            SpawnHudAsync();
+        }
+
+        private async void SpawnHudAsync()
+        {
+            _hudSpawning = true;
+            try
+            {
+                var resourceManager = GameManager.Instance?.ResourceManager;
+                if (resourceManager == null)
+                {
+                    Debug.LogError("[StageNodeUI] ResourceManager가 없어 StageMapHud를 생성할 수 없습니다.");
+                    return;
+                }
+
+                GameObject hudGo = await resourceManager.InstantiateAsync(
+                    PublicVariable.Address.StageMapHudPrefab,
+                    transform);
+
+                if (hudGo == null)
+                {
+                    Debug.LogError($"[StageNodeUI] StageMapHud 생성 실패: {PublicVariable.Address.StageMapHudPrefab}");
+                    return;
+                }
+
+                hudGo.name = "StageMapHud";
+                _hud = hudGo.GetComponent<StageMapHudUI>();
+                if (_hud == null)
+                    _hud = hudGo.GetComponentInChildren<StageMapHudUI>(true);
+
+                if (_hud == null)
+                {
+                    Debug.LogError("[StageNodeUI] StageMapHudUI 컴포넌트가 없습니다.");
+                    resourceManager.ReleaseInstance(hudGo);
+                    return;
+                }
+
+                _hud.EnsureBuilt(transform);
+                _hud.Refresh();
+            }
+            finally
+            {
+                _hudSpawning = false;
+            }
         }
 
         public void OnClickInventory()
@@ -233,7 +278,7 @@ namespace SHIN
                     label.fontSize = 20f;
                     label.alignment = TMPro.TextAlignmentOptions.Center;
                     label.raycastTarget = false;
-                    UiFont.ApplyNotoSansRegular(label);
+                    UiFont.ApplyBody(label);
                 }
 
                 if (_inventoryButton == null)
@@ -271,13 +316,8 @@ namespace SHIN
                 image.preserveAspect = false;
                 image.type = Image.Type.Simple;
                 image.color = Color.white;
-                Sprite buttonSprite = Resources.Load<Sprite>("UI/scarlet_stage_soft_button");
-                if (buttonSprite != null)
-                    image.sprite = buttonSprite;
-                else if (image.sprite == null)
-                    image.color = new Color(0.95f, 0.72f, 0.82f, 0.95f);
-
                 button.targetGraphic = image;
+                LoadInventoryButtonSpriteAsync(image);
             }
 
             Transform labelTransform = button.transform.Find("Label");
@@ -464,18 +504,71 @@ namespace SHIN
                 panelRect.SetAsFirstSibling();
             }
 
-            if (_mapPanelImage.sprite == null)
-            {
-                Sprite panelSprite = Resources.Load<Sprite>(MapPanelResourcePath);
-                if (panelSprite != null)
-                    _mapPanelImage.sprite = panelSprite;
-            }
-
             _mapPanelImage.type = Image.Type.Sliced;
             _mapPanelImage.preserveAspect = false;
             _mapPanelImage.color = Color.white;
             _mapPanelImage.raycastTarget = false;
-            _mapPanelImage.enabled = _mapPanelImage.sprite != null;
+            if (_mapPanelImage.sprite == null)
+                LoadMapPanelSpriteAsync(_mapPanelImage);
+            else
+                _mapPanelImage.enabled = true;
+        }
+
+        private static async void LoadInventoryButtonSpriteAsync(Image image)
+        {
+            if (image == null)
+                return;
+
+            var resourceManager = GameManager.Instance?.ResourceManager;
+            if (resourceManager == null)
+            {
+                if (image.sprite == null)
+                    image.color = new Color(0.95f, 0.72f, 0.82f, 0.95f);
+                return;
+            }
+
+            Sprite buttonSprite = await resourceManager.LoadAsync<Sprite>(
+                PublicVariable.Address.StageSoftButtonSprite);
+            if (image == null)
+                return;
+
+            if (buttonSprite != null)
+            {
+                image.sprite = buttonSprite;
+                image.color = Color.white;
+            }
+            else if (image.sprite == null)
+            {
+                image.color = new Color(0.95f, 0.72f, 0.82f, 0.95f);
+            }
+        }
+
+        private async void LoadMapPanelSpriteAsync(Image image)
+        {
+            if (image == null)
+                return;
+
+            var resourceManager = GameManager.Instance?.ResourceManager;
+            if (resourceManager == null)
+            {
+                image.enabled = false;
+                return;
+            }
+
+            Sprite panelSprite = await resourceManager.LoadAsync<Sprite>(
+                PublicVariable.Address.StageMapPanelSprite);
+            if (image == null)
+                return;
+
+            if (panelSprite != null)
+            {
+                image.sprite = panelSprite;
+                image.enabled = true;
+            }
+            else
+            {
+                image.enabled = false;
+            }
         }
 
         private RectTransform ResolveContentRect()

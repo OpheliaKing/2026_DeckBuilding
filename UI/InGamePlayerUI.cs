@@ -566,16 +566,16 @@ namespace SHIN
 
         private void ApplyHudFonts()
         {
-            UiFont.ApplyNotoSansRegular(_costText);
-            UiFont.ApplyNotoSansRegular(_deckCountText);
-            UiFont.ApplyNotoSansRegular(_discardCountText);
-            UiFont.ApplyNotoSansRegular(_handCountText);
-            UiFont.ApplyNotoSansRegular(_costWarningText);
+            // CostText는 프리팹 Cinzel(장식 숫자) 유지
+            UiFont.ApplyBody(_deckCountText);
+            UiFont.ApplyBody(_discardCountText);
+            UiFont.ApplyBody(_handCountText);
+            UiFont.ApplyBody(_costWarningText);
 
             if (_endTurnButton != null)
             {
                 TextMeshProUGUI label = _endTurnButton.GetComponentInChildren<TextMeshProUGUI>(true);
-                UiFont.ApplyNotoSansRegular(label);
+                UiFont.ApplyBody(label);
             }
         }
     }
