@@ -1,4 +1,5 @@
 using UnityEngine;
+using VRM;
 
 namespace SHIN
 {
@@ -16,6 +17,7 @@ namespace SHIN
 
         private Animator _animator;
         private CharacterWeaponSlot _weaponSlot;
+        private VRMBlendShapeProxy _blendShapeProxy;
         private int _weaponEquipVersion;
 
         public void Initialize(CharacterSelectData data)
@@ -31,8 +33,7 @@ namespace SHIN
             if (string.IsNullOrEmpty(animationName))
                 return false;
 
-            if (_animator == null)
-                _animator = GetComponentInChildren<Animator>(true);
+            EnsureAnimator();
 
             if (_animator == null || !_animator.isActiveAndEnabled)
             {
@@ -96,11 +97,68 @@ namespace SHIN
             HideWeaponPreview();
         }
 
-        /// <summary>표시용 초기화. 모델을 즉시 켠다.</summary>
+        /// <summary>
+        /// 캐시로 숨기기 직전 호출. SetActive(false) 전에 표정/애니 상태를 정리한다.
+        /// (비활성 시 StateMachineBehaviour.OnStateExit가 스킵되어 Blink 등이 남을 수 있음)
+        /// </summary>
+        public void PrepareForHide()
+        {
+            ResetBlendShapes();
+        }
+
+        /// <summary>표시용 초기화. 모델을 즉시 켠 뒤 표정/애니를 기본 상태로 되돌린다.</summary>
         public void InitializeModel()
         {
             if (!gameObject.activeSelf)
                 gameObject.SetActive(true);
+
+            PrepareForShow();
+        }
+
+        /// <summary>
+        /// 다시 보여줄 때 호출. Animator를 기본으로 되돌리고 BlendShape를 0으로 초기화한다.
+        /// </summary>
+        public void PrepareForShow()
+        {
+            EnsureAnimator();
+
+            // 이전 선택에서 mid-Blink state가 남아 OnStateUpdate로 다시 1이 되는 것을 막는다.
+            if (_animator != null && _animator.isActiveAndEnabled)
+            {
+                _animator.Rebind();
+                _animator.Update(0f);
+            }
+
+            ResetBlendShapes();
+        }
+
+        /// <summary>VRMBlendShapeProxy의 모든 클립 Weight를 0으로 만든다.</summary>
+        public void ResetBlendShapes()
+        {
+            if (_blendShapeProxy == null)
+                _blendShapeProxy = GetComponentInChildren<VRMBlendShapeProxy>(true);
+
+            if (_blendShapeProxy == null || _blendShapeProxy.BlendShapeAvatar == null)
+                return;
+
+            var clips = _blendShapeProxy.BlendShapeAvatar.Clips;
+            if (clips == null)
+                return;
+
+            for (int i = 0; i < clips.Count; i++)
+            {
+                BlendShapeClip clip = clips[i];
+                if (clip == null)
+                    continue;
+
+                _blendShapeProxy.ImmediatelySetValue(BlendShapeKey.CreateFromClip(clip), 0f);
+            }
+        }
+
+        private void EnsureAnimator()
+        {
+            if (_animator == null)
+                _animator = GetComponentInChildren<Animator>(true);
         }
     }
 }

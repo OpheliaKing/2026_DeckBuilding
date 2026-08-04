@@ -386,7 +386,11 @@ namespace SHIN
                     continue;
 
                 if (!shouldActive && pair.Value.Model != null)
+                {
+                    // SetActive(false) 전에 리셋해야 ImmediatelySetValue / OnStateExit 대체가 동작한다.
+                    pair.Value.Model.PrepareForHide();
                     pair.Value.Model.HideWeaponPreview();
+                }
 
                 pair.Value.GameObject.SetActive(shouldActive);
             }
@@ -406,7 +410,12 @@ namespace SHIN
             foreach (var pair in _modelCache)
             {
                 if (pair.Value.Model != null)
+                {
+                    if (pair.Value.GameObject != null && pair.Value.GameObject.activeInHierarchy)
+                        pair.Value.Model.PrepareForHide();
+
                     pair.Value.Model.HideWeaponPreview();
+                }
 
                 if (pair.Value.GameObject != null)
                     pair.Value.GameObject.SetActive(false);
