@@ -71,6 +71,8 @@ namespace SHIN
 
         private void Awake()
         {
+            _bgmVolume = PlayerPrefs.GetFloat("SHIN_Volume_BGM", _bgmVolume);
+            _seVolume = PlayerPrefs.GetFloat("SHIN_Volume_SE", _seVolume);
             EnsureSources();
             ApplyVolumes();
         }

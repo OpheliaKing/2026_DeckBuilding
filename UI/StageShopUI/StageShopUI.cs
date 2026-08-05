@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 
 namespace SHIN
@@ -14,6 +15,37 @@ namespace SHIN
         private System.Action<int> _onBuy;
         private System.Action _onExit;
         private int _spawnVersion;
+        private bool _fontsApplied;
+
+        private void OnEnable()
+        {
+            ApplyFonts();
+        }
+
+        private void ApplyFonts()
+        {
+            if (_fontsApplied)
+                return;
+
+            TextMeshProUGUI[] texts = GetComponentsInChildren<TextMeshProUGUI>(true);
+            for (int i = 0; i < texts.Length; i++)
+            {
+                TextMeshProUGUI text = texts[i];
+                if (text == null)
+                    continue;
+
+                text.fontStyle = FontStyles.Normal;
+                string parent = text.transform.parent != null
+                    ? text.transform.parent.name
+                    : string.Empty;
+                if (parent == "TitleBanner" || text.gameObject.name == "TitleText")
+                    UiFont.ApplyTitle(text);
+                else
+                    UiFont.ApplyBody(text);
+            }
+
+            _fontsApplied = true;
+        }
 
         public void Setup(
             IReadOnlyList<StageShopOffer> offers,
@@ -21,6 +53,7 @@ namespace SHIN
             System.Action<int> onBuy,
             System.Action onExit)
         {
+            ApplyFonts();
             _offers.Clear();
             if (offers != null)
             {

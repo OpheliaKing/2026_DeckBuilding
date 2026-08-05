@@ -45,6 +45,7 @@ namespace SHIN
         private GameObject _cardInstance;
         private bool _isCardLoading;
         private int _bindVersion;
+        private bool _fontsApplied;
 
         private void Awake()
         {
@@ -52,10 +53,31 @@ namespace SHIN
                 _cardRoot = _cardLayer.transform;
 
             EnsureUiClickable();
+            ApplyFonts();
+        }
+
+        private void ApplyFonts()
+        {
+            if (_fontsApplied)
+                return;
+
+            TextMeshProUGUI[] texts = GetComponentsInChildren<TextMeshProUGUI>(true);
+            for (int i = 0; i < texts.Length; i++)
+            {
+                TextMeshProUGUI text = texts[i];
+                if (text == null)
+                    continue;
+
+                text.fontStyle = FontStyles.Normal;
+                UiFont.ApplyBody(text);
+            }
+
+            _fontsApplied = true;
         }
 
         public void Bind(StageShopOffer offer, int offerIndex, int currentGold, Action<int> onBuy)
         {
+            ApplyFonts();
             bool prevSoldOut = _offer != null && _offer.IsSoldOut;
 
             _offer = offer;
@@ -197,9 +219,13 @@ namespace SHIN
 
         private void UpdatePriceVisual()
         {
+            _normalGoldColor = SoftPalette.RewardText;
+            _notEnoughGoldColor = SoftPalette.AccentRoseGold;
+
             int price = _offer != null ? Mathf.Max(0, _offer.Price) : 0;
             if (_goldText != null)
             {
+                _goldText.fontStyle = FontStyles.Normal;
                 _goldText.text = price.ToString();
                 bool canAfford = _offer != null && !_offer.IsSoldOut && _currentGold >= price;
                 _goldText.color = canAfford ? _normalGoldColor : _notEnoughGoldColor;

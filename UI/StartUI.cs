@@ -29,6 +29,10 @@ namespace SHIN
         [SerializeField]
         private RectTransform _buttonsRoot;
 
+        [Header("Atmosphere")]
+        [SerializeField]
+        private RosePetalFallUI _rosePetalFall;
+
         [Header("Intro Timing")]
         [SerializeField]
         private float _bgFadeDuration = 0.55f;
@@ -122,7 +126,14 @@ namespace SHIN
             if (!_introFinished)
                 return;
 
-            // TODO: 옵션 UI
+            var uiManager = GameManager.Instance?.UIManager;
+            if (uiManager == null)
+            {
+                Debug.LogError("[StartUI] UIManager가 없습니다.");
+                return;
+            }
+
+            uiManager.Show(PublicVariable.Address.OptionUIPrefab);
         }
 
         public void OnClickQuitButton()
@@ -148,6 +159,7 @@ namespace SHIN
             _pendingIntro = false;
             StopIntroRoutine();
             _introFinished = false;
+            _rosePetalFall?.Play();
             _introRoutine = StartCoroutine(IntroRoutine());
         }
 
@@ -327,6 +339,9 @@ namespace SHIN
                 if (buttons != null)
                     _buttonsRoot = buttons as RectTransform;
             }
+
+            if (_rosePetalFall == null)
+                _rosePetalFall = GetComponentInChildren<RosePetalFallUI>(true);
         }
 
         private void StopIntroRoutine()
@@ -342,6 +357,7 @@ namespace SHIN
         {
             _pendingIntro = false;
             StopIntroRoutine();
+            _rosePetalFall?.Stop(clearVisible: true);
 
             var uiManager = GameManager.Instance?.UIManager;
             if (uiManager != null && uiManager.Current == this)

@@ -12,6 +12,9 @@ namespace SHIN
         private GameObject _selectedMark;
 
         [SerializeField]
+        private Image[] _frameImages;
+
+        [SerializeField]
         private Transform _itemLayer;
 
         [SerializeField]
@@ -42,7 +45,32 @@ namespace SHIN
                     _cardRoot = cardLayer;
             }
 
+            if (_frameImages == null || _frameImages.Length == 0)
+                CacheFrameImages();
+
             EnsureUiClickable();
+        }
+
+        private void CacheFrameImages()
+        {
+            var frames = new System.Collections.Generic.List<Image>();
+            Transform itemBg = transform.Find("ItemBaseUI/Bg");
+            Transform cardBg = transform.Find("CardLayer/Bg");
+            if (itemBg != null)
+            {
+                var img = itemBg.GetComponent<Image>();
+                if (img != null)
+                    frames.Add(img);
+            }
+
+            if (cardBg != null)
+            {
+                var img = cardBg.GetComponent<Image>();
+                if (img != null)
+                    frames.Add(img);
+            }
+
+            _frameImages = frames.ToArray();
         }
 
         public void Bind(StageRewardOffer offer, Action<StageRewardObjectUI> onClicked)
@@ -60,6 +88,19 @@ namespace SHIN
         {
             if (_selectedMark != null)
                 _selectedMark.SetActive(selected);
+
+            Color frameColor = selected ? SoftPalette.SlotSelected : SoftPalette.SlotNormal;
+            if (_frameImages != null)
+            {
+                for (int i = 0; i < _frameImages.Length; i++)
+                {
+                    if (_frameImages[i] != null)
+                        _frameImages[i].color = frameColor;
+                }
+            }
+
+            // 선택 시 살짝만 키워 포커스를 주고 (외곽 글로우 대신)
+            transform.localScale = selected ? new Vector3(1.04f, 1.04f, 1f) : Vector3.one;
         }
 
         protected override bool CanClick(PointerEventData eventData)
@@ -94,7 +135,10 @@ namespace SHIN
                     _itemIcon.sprite = _offer.ItemData.ItemIcon;
 
                 if (_itemDescText != null)
+                {
                     _itemDescText.text = _offer.ItemData.ItemDescription;
+                    _itemDescText.color = SoftPalette.RewardText;
+                }
             }
             else if (_itemDescText != null)
             {

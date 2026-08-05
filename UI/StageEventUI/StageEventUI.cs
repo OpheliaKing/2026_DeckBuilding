@@ -30,6 +30,25 @@ namespace SHIN
         private int _spawnVersion;
         private int _imageLoadVersion;
         private bool _choiceLocked;
+        private bool _fontsApplied;
+
+        private void OnEnable()
+        {
+            ApplyFonts();
+        }
+
+        private void ApplyFonts()
+        {
+            if (_fontsApplied)
+                return;
+
+            if (_eventTitleText != null)
+                UiFont.ApplyTitle(_eventTitleText);
+            if (_eventDescriptionText != null)
+                UiFont.ApplyBody(_eventDescriptionText);
+
+            _fontsApplied = true;
+        }
 
         public void Setup(StageEventData eventData, Action<int> onChoiceSelected)
         {

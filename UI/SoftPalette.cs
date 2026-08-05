@@ -15,5 +15,11 @@ namespace SHIN
         public static readonly Color TabInactiveTint = new(1f, 1f, 1f, 0.72f);
         public static readonly Color SlotNormal = Color.white;
         public static readonly Color SlotSelected = new(1f, 0.9f, 0.78f, 1f);
+
+        // StageReward (라벤더·로즈골드 프레임)
+        public static readonly Color RewardLavender = new(0.86f, 0.82f, 0.92f, 1f);
+        public static readonly Color RewardPanelFill = new(0.78f, 0.74f, 0.88f, 1f);
+        public static readonly Color RewardText = new(0.36f, 0.24f, 0.42f, 1f);
+        public static readonly Color RewardButtonTint = new(1f, 0.92f, 0.94f, 1f);
     }
 }

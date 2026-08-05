@@ -17,7 +17,8 @@ namespace SHIN
     {
         [Header("Stage Shop")]
         [SerializeField]
-        private int _shopOfferCount = 6;
+        [Tooltip("상점 판매 슬롯 수. 프레임 찌그러짐 방지를 위해 3 권장(최소 3).")]
+        private int _shopOfferCount = 3;
 
         [SerializeField]
         private StageShopPriceTable _shopPriceTable = new StageShopPriceTable
@@ -52,7 +53,8 @@ namespace SHIN
                 return;
             }
 
-            List<StageRewardOffer> rewardOffers = await BuildRewardOffersAsync(_shopOfferCount);
+            int offerCount = Mathf.Max(3, _shopOfferCount);
+            List<StageRewardOffer> rewardOffers = await BuildRewardOffersAsync(offerCount);
             if (rewardOffers == null || rewardOffers.Count == 0)
             {
                 Debug.LogWarning("[StageManager] 상점 상품 생성 실패로 맵으로 복귀합니다.");

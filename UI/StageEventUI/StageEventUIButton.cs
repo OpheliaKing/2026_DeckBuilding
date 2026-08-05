@@ -22,7 +22,10 @@ namespace SHIN
             _onClicked = onClicked;
 
             if (_buttonText != null)
+            {
                 _buttonText.text = buttonText ?? string.Empty;
+                UiFont.ApplyBody(_buttonText);
+            }
 
             if (_button == null)
                 _button = GetComponent<Button>();
