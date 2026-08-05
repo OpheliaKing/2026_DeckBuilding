@@ -28,8 +28,8 @@ namespace SHIN
         public int Cost => _cost;
 
         /// <summary>
-        /// 카드 일러스트 Addressables 경로 (Sprite). 비우면 플레이스홀더.
-        /// 권장 해상도: 790×767 (프레임 투명 칸과 동일 비율).
+        /// CardIllustAtlas 스프라이트 이름. 비우면 플레이스홀더.
+        /// 예: card_illust_pink_sword_slash / 권장 해상도 1024×1024.
         /// </summary>
         [SerializeField]
         private string _illustrationPath;

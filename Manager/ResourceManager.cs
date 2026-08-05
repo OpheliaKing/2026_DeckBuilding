@@ -273,6 +273,30 @@ namespace SHIN
         }
 
         /// <summary>
+        /// 아틀라스를 미리 로드해 캐시에 넣습니다. (카드 일러스트 첫 표시 공백 방지용)
+        /// </summary>
+        public Task<SpriteAtlas> PreloadAtlasAsync(ATLAS_TYPE atlasType)
+        {
+            return GetAtlasAsync(atlasType);
+        }
+
+        /// <summary>
+        /// 이미 캐시된 아틀라스에서만 스프라이트를 동기 조회합니다. 미캐시면 false.
+        /// </summary>
+        public bool TryGetCachedAtlasSprite(ATLAS_TYPE atlasType, string spriteName, out Sprite sprite)
+        {
+            sprite = null;
+            if (string.IsNullOrEmpty(spriteName))
+                return false;
+
+            if (!_atlasCache.TryGetValue(atlasType, out SpriteAtlas atlas) || atlas == null)
+                return false;
+
+            sprite = atlas.GetSprite(spriteName);
+            return sprite != null;
+        }
+
+        /// <summary>
         /// ATLAS_TYPE에 해당하는 SpriteAtlas를 로드합니다.
         /// </summary>
         public async Task<SpriteAtlas> GetAtlasAsync(ATLAS_TYPE atlasType)
@@ -304,6 +328,9 @@ namespace SHIN
                 case ATLAS_TYPE.UI:
                     address = PublicVariable.Address.UIAtlas;
                     return true;
+                case ATLAS_TYPE.CardIllust:
+                    address = PublicVariable.Address.CardIllustAtlas;
+                    return true;
                 default:
                     address = null;
                     return false;
@@ -320,6 +347,7 @@ namespace SHIN
     public enum ATLAS_TYPE
     {
         UI,
+        CardIllust,
     }
 }
 

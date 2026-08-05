@@ -113,6 +113,10 @@ namespace SHIN
 
             await InitializeSOIndexesAsync();
 
+            // 카드 일러스트 아틀라스 선로드 (손패/상점/보상 첫 표시 공백 방지)
+            if (ResourceManager != null)
+                await ResourceManager.PreloadAtlasAsync(ATLAS_TYPE.CardIllust);
+
             SoundManager soundManager = SoundManager;
             if (soundManager != null)
             {

@@ -86,6 +86,8 @@ namespace SHIN
             public const string DefaultHitSe =
                 "Assets/Addressables/Sound/SE/Weapon/Sword/se_sword_hit_001.mp3";
             public const string UIAtlas = "Assets/Addressables/Atlas/UIAtlas.spriteatlasv2";
+            public const string CardIllustAtlas =
+                "Assets/Addressables/Atlas/CardIllustAtlas.spriteatlasv2";
             public const string PlayerAnimatorSword =
                 "Assets/Addressables/Animator/Player/PlayerAnimator_Sword.controller";
             public const string PlayerAnimatorBow =

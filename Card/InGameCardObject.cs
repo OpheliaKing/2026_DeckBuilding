@@ -105,8 +105,31 @@ namespace SHIN
                 return;
             }
 
-            Sprite sprite = await resourceManager.LoadAsync<Sprite>(illustrationPath);
+            // Boot에서 CardIllustAtlas를 선로드했다면 동기 조회로 한 프레임 공백을 막는다.
+            if (resourceManager.TryGetCachedAtlasSprite(
+                    ATLAS_TYPE.CardIllust,
+                    illustrationPath,
+                    out Sprite cachedSprite))
+            {
+                if (version != _illustLoadVersion)
+                    return;
+
+                ApplyIllustration(cachedSprite);
+                return;
+            }
+
+            Sprite sprite = await resourceManager.GetAtlasSpriteAsync(
+                ATLAS_TYPE.CardIllust,
+                illustrationPath);
             if (version != _illustLoadVersion)
+                return;
+
+            ApplyIllustration(sprite);
+        }
+
+        private void ApplyIllustration(Sprite sprite)
+        {
+            if (_cardIllustrationImage == null)
                 return;
 
             if (sprite == null)
