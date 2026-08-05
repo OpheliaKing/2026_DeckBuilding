@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace SHIN
 {
@@ -12,6 +13,12 @@ namespace SHIN
     {
         [SerializeField]
         private IconCycleSelectUI _iconCycleSelectUI;
+
+        [SerializeField]
+        private Button _confirmButton;
+
+        [SerializeField]
+        private Button _backButton;
 
         [SerializeField]
         private TextMeshProUGUI _nameText;
@@ -53,6 +60,7 @@ namespace SHIN
             }
 
             BindIconCycle();
+            BindActionButtons();
 
             if (_weapons.Count == 0)
             {
@@ -103,6 +111,47 @@ namespace SHIN
 
             _iconCycleSelectUI.OnMoveRequested -= HandleMoveRequested;
             _iconCycleSelectUI.OnMoveRequested += HandleMoveRequested;
+        }
+
+        private void BindActionButtons()
+        {
+            if (_confirmButton == null)
+                _confirmButton = FindNamedButton("SelectButton");
+
+            if (_backButton == null)
+                _backButton = FindNamedButton("PrevButton");
+
+            if (_confirmButton != null)
+            {
+                _confirmButton.onClick.RemoveListener(OnClickConfirm);
+                _confirmButton.onClick.AddListener(OnClickConfirm);
+            }
+            else
+            {
+                Debug.LogError("[WeaponSelectUI] SelectButton이 없습니다.");
+            }
+
+            if (_backButton != null)
+            {
+                _backButton.onClick.RemoveListener(OnClickBack);
+                _backButton.onClick.AddListener(OnClickBack);
+            }
+            else
+            {
+                Debug.LogError("[WeaponSelectUI] PrevButton(뒤로)이 없습니다.");
+            }
+        }
+
+        private Button FindNamedButton(string objectName)
+        {
+            Button[] buttons = GetComponentsInChildren<Button>(true);
+            for (int i = 0; i < buttons.Length; i++)
+            {
+                if (buttons[i] != null && buttons[i].gameObject.name == objectName)
+                    return buttons[i];
+            }
+
+            return null;
         }
 
         private void HandleMoveRequested(int direction)

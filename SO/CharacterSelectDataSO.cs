@@ -78,5 +78,17 @@ namespace SHIN
 
         /// <summary>UnitData.unitTid 별칭.</summary>
         public string UnitTid => UnitDataSOTid;
+
+        [SerializeField]
+        private List<string> _haveItemList = new();
+
+        [SerializeField]
+        private List<string> _haveCardList = new();
+
+        /// <summary>캐릭터 선택 시 추가로 얻는 아이템 tid 목록.</summary>
+        public IReadOnlyList<string> HaveItemList => _haveItemList;
+
+        /// <summary>캐릭터 선택 시 추가로 얻는 카드 tid 목록.</summary>
+        public IReadOnlyList<string> HaveCardList => _haveCardList;
     }
 }

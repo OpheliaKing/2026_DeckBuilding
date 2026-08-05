@@ -7,7 +7,7 @@ namespace SHIN
 {
     /// <summary>
     /// 런 인벤토리. 보유 카드 / 아이템을 탭으로 확인한다.
-    /// 레이아웃은 InventoryUI 프리팹에서 구성한다.
+    /// 아이템 클릭 시 슬롯 옆에 설명 패널을 표시한다.
     /// </summary>
     public class InventoryUI : UIBase
     {
@@ -56,6 +56,13 @@ namespace SHIN
         private TextMeshProUGUI _emptyStateText;
 
         [SerializeField]
+        private Vector2 _itemDetailSize = new(280f, 420f);
+
+        [SerializeField]
+        [Tooltip("슬롯 중심에서 패널 왼쪽이 얼마나 겹칠지(슬롯 너비 비율). 0.4 ≈ 슬롯 오른쪽 절반 위에 패널 시작")]
+        private float _detailOverlapAlongSlot = 0.4f;
+
+        [SerializeField]
         private Color _tabActiveColor = SoftPalette.AccentRoseGold;
 
         [SerializeField]
@@ -64,11 +71,33 @@ namespace SHIN
         private InventoryTab _currentTab = InventoryTab.Cards;
         private bool _buttonsBound;
         private bool _fontsApplied;
+        private InventoryItemSlotUI _shownDetailSlot;
 
         private void Awake()
         {
             ApplyFonts();
             BindButtons();
+            HideItemDetail();
+        }
+
+        private void Update()
+        {
+            if (_itemDetailRoot == null || !_itemDetailRoot.activeSelf)
+                return;
+
+            if (WasDismissKeyPressed())
+            {
+                DismissItemDetail();
+                return;
+            }
+
+            if (!WasPrimaryPointerPressed())
+                return;
+
+            if (IsPointerOverDetailOrSelectedSlot())
+                return;
+
+            DismissItemDetail();
         }
 
         /// <summary>
@@ -116,8 +145,8 @@ namespace SHIN
             if (_itemListUI != null)
                 _itemListUI.gameObject.SetActive(tab == InventoryTab.Items);
 
-            if (_itemDetailRoot != null)
-                _itemDetailRoot.SetActive(tab == InventoryTab.Items);
+            ApplyTabButtonVisual(_cardsTabButton, tab == InventoryTab.Cards);
+            ApplyTabButtonVisual(_itemsTabButton, tab == InventoryTab.Items);
 
             if (_cardsTabLabel != null)
                 _cardsTabLabel.color = tab == InventoryTab.Cards ? _tabActiveColor : _tabInactiveColor;
@@ -125,11 +154,7 @@ namespace SHIN
             if (_itemsTabLabel != null)
                 _itemsTabLabel.color = tab == InventoryTab.Items ? _tabActiveColor : _tabInactiveColor;
 
-            ApplyTabButtonVisual(_cardsTabButton, tab == InventoryTab.Cards);
-            ApplyTabButtonVisual(_itemsTabButton, tab == InventoryTab.Items);
-
-            if (tab != InventoryTab.Items)
-                ClearItemDetail();
+            HideItemDetail();
         }
 
         private void RefreshCurrentTab()
@@ -160,29 +185,198 @@ namespace SHIN
             if (_itemListUI != null)
                 _itemListUI.Setup(items, OnItemSelected);
 
-            ClearItemDetail();
+            HideItemDetail();
             SetEmptyState(count == 0, "보유한 아이템이 없습니다.");
         }
 
-        private void OnItemSelected(ItemData itemData)
+        private void OnItemSelected(InventoryItemSlotUI slot)
         {
+            if (slot == null || slot.ItemData == null)
+            {
+                HideItemDetail();
+                return;
+            }
+
+            // 같은 슬롯 재클릭 시 패널 닫기
+            if (_shownDetailSlot == slot && _itemDetailRoot != null && _itemDetailRoot.activeSelf)
+            {
+                DismissItemDetail();
+                return;
+            }
+
+            ItemData itemData = slot.ItemData;
+
             if (_itemNameText != null)
-                _itemNameText.text = itemData != null ? itemData.ItemName : string.Empty;
+                _itemNameText.text = itemData.ItemName ?? string.Empty;
 
             if (_itemDescriptionText != null)
-                _itemDescriptionText.text = itemData != null ? itemData.ItemDescription : string.Empty;
+                _itemDescriptionText.text = itemData.ItemDescription ?? string.Empty;
 
-            if (_itemDetailRoot != null)
-                _itemDetailRoot.SetActive(true);
+            ShowItemDetailNearSlot(slot);
         }
 
-        private void ClearItemDetail()
+        private void DismissItemDetail()
         {
+            InventoryItemSlotUI slot = _shownDetailSlot;
+            HideItemDetail();
+            if (slot != null)
+                slot.SetSelected(false);
+            _itemListUI?.ClearSelection();
+        }
+
+        private static bool WasPrimaryPointerPressed()
+        {
+            if (Input.GetMouseButtonDown(0))
+                return true;
+
+            if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began)
+                return true;
+
+            return false;
+        }
+
+        private static bool WasDismissKeyPressed()
+        {
+            return Input.GetKeyDown(KeyCode.Escape);
+        }
+
+        private bool IsPointerOverDetailOrSelectedSlot()
+        {
+            Vector2 screenPos = GetPrimaryPointerScreenPosition();
+            Canvas canvas = GetComponentInParent<Canvas>();
+            Camera cam = null;
+            if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                cam = canvas.worldCamera;
+
+            if (_itemDetailRoot != null)
+            {
+                var detailRt = _itemDetailRoot.transform as RectTransform;
+                if (detailRt != null &&
+                    RectTransformUtility.RectangleContainsScreenPoint(detailRt, screenPos, cam))
+                    return true;
+            }
+
+            if (_shownDetailSlot != null)
+            {
+                var slotRt = _shownDetailSlot.transform as RectTransform;
+                if (slotRt != null &&
+                    RectTransformUtility.RectangleContainsScreenPoint(slotRt, screenPos, cam))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static Vector2 GetPrimaryPointerScreenPosition()
+        {
+            if (Input.touchCount > 0)
+                return Input.GetTouch(0).position;
+
+            return Input.mousePosition;
+        }
+
+        private void ShowItemDetailNearSlot(InventoryItemSlotUI slot)
+        {
+            if (_itemDetailRoot == null || slot == null)
+                return;
+
+            RectTransform detailRt = _itemDetailRoot.transform as RectTransform;
+            if (detailRt == null)
+                return;
+
+            _shownDetailSlot = slot;
+            _itemDetailRoot.SetActive(true);
+            detailRt.SetAsLastSibling();
+            detailRt.sizeDelta = _itemDetailSize;
+
+            RectTransform slotRect = slot.transform as RectTransform;
+            PositionDetailBesideSlot(detailRt, slotRect);
+        }
+
+        private void PositionDetailBesideSlot(RectTransform detailRt, RectTransform slotRect)
+        {
+            if (detailRt == null || slotRect == null)
+                return;
+
+            RectTransform parent = detailRt.parent as RectTransform;
+            if (parent == null)
+                return;
+
+            Canvas canvas = detailRt.GetComponentInParent<Canvas>();
+            Camera cam = null;
+            if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                cam = canvas.worldCamera;
+
+            // 슬롯 중심 → 패널 왼쪽(피벗)이 오도록 해서 슬롯 오른쪽에 겹쳐 보이게
+            Vector3 worldCenter = slotRect.TransformPoint(slotRect.rect.center);
+            Vector2 screenCenter = RectTransformUtility.WorldToScreenPoint(cam, worldCenter);
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    parent, screenCenter, cam, out Vector2 localCenter))
+                return;
+
+            float slotWidthInParent = ApproximateSlotWidthInParent(slotRect, parent);
+            float overlap = slotWidthInParent * Mathf.Clamp01(_detailOverlapAlongSlot);
+
+            detailRt.pivot = new Vector2(0f, 0.5f);
+            detailRt.anchorMin = new Vector2(0.5f, 0.5f);
+            detailRt.anchorMax = new Vector2(0.5f, 0.5f);
+            detailRt.anchoredPosition = new Vector2(localCenter.x - overlap, localCenter.y);
+
+            ClampDetailInsideParent(detailRt, parent);
+        }
+
+        private static float ApproximateSlotWidthInParent(RectTransform slotRect, RectTransform parent)
+        {
+            Canvas canvas = parent.GetComponentInParent<Canvas>();
+            Camera cam = null;
+            if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                cam = canvas.worldCamera;
+
+            Vector3[] corners = new Vector3[4];
+            slotRect.GetWorldCorners(corners);
+            Vector2 screenL = RectTransformUtility.WorldToScreenPoint(cam, corners[0]);
+            Vector2 screenR = RectTransformUtility.WorldToScreenPoint(cam, corners[3]);
+
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screenL, cam, out Vector2 localL))
+                return slotRect.rect.width;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screenR, cam, out Vector2 localR))
+                return slotRect.rect.width;
+
+            return Mathf.Abs(localR.x - localL.x);
+        }
+
+        private static void ClampDetailInsideParent(RectTransform detailRt, RectTransform parent)
+        {
+            if (detailRt == null || parent == null)
+                return;
+
+            Rect parentRect = parent.rect;
+            Vector2 pos = detailRt.anchoredPosition;
+            Vector2 size = detailRt.sizeDelta;
+            Vector2 pivot = detailRt.pivot;
+
+            float minX = parentRect.xMin + size.x * pivot.x;
+            float maxX = parentRect.xMax - size.x * (1f - pivot.x);
+            float minY = parentRect.yMin + size.y * pivot.y;
+            float maxY = parentRect.yMax - size.y * (1f - pivot.y);
+
+            pos.x = Mathf.Clamp(pos.x, minX, maxX);
+            pos.y = Mathf.Clamp(pos.y, minY, maxY);
+            detailRt.anchoredPosition = pos;
+        }
+
+        private void HideItemDetail()
+        {
+            if (_itemDetailRoot != null)
+                _itemDetailRoot.SetActive(false);
+
             if (_itemNameText != null)
-                _itemNameText.text = "아이템을 선택하세요";
+                _itemNameText.text = string.Empty;
 
             if (_itemDescriptionText != null)
                 _itemDescriptionText.text = string.Empty;
+
+            _shownDetailSlot = null;
         }
 
         private void SetEmptyState(bool empty, string message)
@@ -250,7 +444,6 @@ namespace SHIN
                     ? text.transform.parent.name
                     : string.Empty;
 
-                // Close X는 Cinzel 유지
                 if (parent == "CloseButton")
                     continue;
 

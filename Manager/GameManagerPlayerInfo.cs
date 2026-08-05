@@ -42,12 +42,26 @@ namespace SHIN
 
         /// <summary>
         /// 유닛 세팅 UI에서 캐릭터/무기 확정 시 호출.
-        /// UnitInfo 생성 → 장비 타입 → 기본 덱 카드 추가.
+        /// UnitInfo 생성 → 장비 타입 → 기본 덱(+캐릭터 보너스) 카드 추가 → 보너스 아이템 추가.
         /// </summary>
         public void SetupPlayerCharacter(
             string unitTid,
             CHARACTER_EQUIP_TYPE equipType,
             IReadOnlyList<string> cardTids,
+            Action<UnitInfo> onComplete = null)
+        {
+            SetupPlayerCharacter(unitTid, equipType, cardTids, null, onComplete);
+        }
+
+        /// <summary>
+        /// 유닛 세팅 UI에서 캐릭터/무기 확정 시 호출.
+        /// startingItemTids: 캐릭터 선택 보너스 아이템.
+        /// </summary>
+        public void SetupPlayerCharacter(
+            string unitTid,
+            CHARACTER_EQUIP_TYPE equipType,
+            IReadOnlyList<string> cardTids,
+            IReadOnlyList<string> startingItemTids,
             Action<UnitInfo> onComplete = null)
         {
             AddPlayerCharacter(unitTid, unitInfo =>
@@ -60,26 +74,67 @@ namespace SHIN
 
                 unitInfo.SetEquipType(equipType);
 
-                if (cardTids == null || cardTids.Count == 0)
+                var cardList = CollectNonEmptyTids(cardTids);
+                void AfterCards(UnitInfo info)
                 {
-                    onComplete?.Invoke(unitInfo);
-                    return;
-                }
-
-                var cardList = new List<string>(cardTids.Count);
-                for (int i = 0; i < cardTids.Count; i++)
-                {
-                    if (!string.IsNullOrEmpty(cardTids[i]))
-                        cardList.Add(cardTids[i]);
+                    ApplyStartingItems(info, startingItemTids, onComplete);
                 }
 
                 if (cardList.Count == 0)
                 {
+                    AfterCards(unitInfo);
+                    return;
+                }
+
+                AddCard(unitInfo, cardList, AfterCards);
+            });
+        }
+
+        private static List<string> CollectNonEmptyTids(IReadOnlyList<string> tids)
+        {
+            var list = new List<string>();
+            if (tids == null)
+                return list;
+
+            for (int i = 0; i < tids.Count; i++)
+            {
+                if (!string.IsNullOrEmpty(tids[i]))
+                    list.Add(tids[i]);
+            }
+
+            return list;
+        }
+
+        private void ApplyStartingItems(
+            UnitInfo unitInfo,
+            IReadOnlyList<string> itemTids,
+            Action<UnitInfo> onComplete)
+        {
+            var items = CollectNonEmptyTids(itemTids);
+            if (unitInfo == null || items.Count == 0)
+            {
+                onComplete?.Invoke(unitInfo);
+                return;
+            }
+
+            GetSOAsync<ItemDataSO>(PublicVariable.Address.ItemDataSO, itemDataSO =>
+            {
+                if (itemDataSO == null)
+                {
+                    Debug.LogError("[GameManager] ItemDataSO 로드 실패 — 시작 아이템을 지급하지 않습니다.");
                     onComplete?.Invoke(unitInfo);
                     return;
                 }
 
-                AddCard(unitInfo, cardList, onComplete);
+                unitInfo.SetItemDataSO(itemDataSO);
+
+                for (int i = 0; i < items.Count; i++)
+                {
+                    if (!unitInfo.AddItem(items[i]))
+                        Debug.LogWarning($"[GameManager] 시작 아이템 추가 실패: {items[i]}");
+                }
+
+                onComplete?.Invoke(unitInfo);
             });
         }
 

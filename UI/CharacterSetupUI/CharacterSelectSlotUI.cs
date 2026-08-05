@@ -18,9 +18,6 @@ namespace SHIN
         [SerializeField]
         private Image _iconImage;
 
-        [SerializeField]
-        private GameObject _selectedMark;
-
         private CharacterSelectData _data;
         private Action<CharacterSelectData> _onClick;
         private int _iconLoadVersion;
@@ -63,8 +60,12 @@ namespace SHIN
 
         public void SetSelected(bool selected)
         {
-            if (_selectedMark != null)
-                _selectedMark.SetActive(selected);
+            Image rootImage = _button != null ? _button.targetGraphic as Image : null;
+            if (rootImage == null)
+                rootImage = GetComponent<Image>();
+
+            if (rootImage != null)
+                rootImage.color = selected ? SoftPalette.SlotSelected : SoftPalette.SlotNormal;
         }
 
         private void HandleClick()

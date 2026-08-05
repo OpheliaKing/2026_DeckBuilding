@@ -21,10 +21,10 @@ namespace SHIN
         private InventoryItemSlotUI _slotPrefab;
 
         private readonly List<InventoryItemSlotUI> _slots = new();
-        private Action<ItemData> _onItemSelected;
+        private Action<InventoryItemSlotUI> _onItemSelected;
         private InventoryItemSlotUI _selectedSlot;
 
-        public void Setup(IReadOnlyList<ItemData> items, Action<ItemData> onItemSelected)
+        public void Setup(IReadOnlyList<ItemData> items, Action<InventoryItemSlotUI> onItemSelected)
         {
             if (_contentRoot == null)
             {
@@ -61,16 +61,25 @@ namespace SHIN
             _selectedSlot = null;
         }
 
-        private void OnSlotSelected(InventoryItemSlotUI slot)
+        public void ClearSelection()
         {
             if (_selectedSlot != null)
+            {
+                _selectedSlot.SetSelected(false);
+                _selectedSlot = null;
+            }
+        }
+
+        private void OnSlotSelected(InventoryItemSlotUI slot)
+        {
+            if (_selectedSlot != null && _selectedSlot != slot)
                 _selectedSlot.SetSelected(false);
 
             _selectedSlot = slot;
             if (_selectedSlot != null)
                 _selectedSlot.SetSelected(true);
 
-            _onItemSelected?.Invoke(slot != null ? slot.ItemData : null);
+            _onItemSelected?.Invoke(slot);
         }
 
         private InventoryItemSlotUI CreateSlot()

@@ -298,16 +298,49 @@ namespace SHIN
 
         private void CommitPlayerSetup(GameManager gameManager, string unitTid)
         {
+            List<string> cardDeck = BuildStartingCardDeck(_selectedWeapon, _selectedCharacter);
+
             gameManager.SetupPlayerCharacter(
                 unitTid,
                 _selectedWeapon.WeaponType,
-                _selectedWeapon.CardDeckList,
+                cardDeck,
+                _selectedCharacter.HaveItemList,
                 unitInfo =>
                 {
                     _isSaving = false;
                     OnSetupCompleted?.Invoke(unitInfo);
                     CloseSelf();
                 });
+        }
+
+        private static List<string> BuildStartingCardDeck(
+            WeaponData weapon,
+            CharacterSelectData character)
+        {
+            var cards = new List<string>();
+
+            if (weapon?.CardDeckList != null)
+            {
+                for (int i = 0; i < weapon.CardDeckList.Count; i++)
+                {
+                    string tid = weapon.CardDeckList[i];
+                    if (!string.IsNullOrEmpty(tid))
+                        cards.Add(tid);
+                }
+            }
+
+            IReadOnlyList<string> bonusCards = character?.HaveCardList;
+            if (bonusCards != null)
+            {
+                for (int i = 0; i < bonusCards.Count; i++)
+                {
+                    string tid = bonusCards[i];
+                    if (!string.IsNullOrEmpty(tid))
+                        cards.Add(tid);
+                }
+            }
+
+            return cards;
         }
 
         private void ShowCharacterStep()
