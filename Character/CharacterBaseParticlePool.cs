@@ -244,6 +244,7 @@ namespace SHIN
         public void ReleaseCombatEffects()
         {
             CleanupEffectPools();
+            ReleaseHealthBar();
         }
 
         private void CleanupEffectPools()

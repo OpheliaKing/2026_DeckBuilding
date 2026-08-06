@@ -35,6 +35,7 @@ namespace SHIN
         private void LateUpdate()
         {
             ApplyCharacterTimeScale();
+            UpdateHealthBarBillboard();
         }
 
         /// <summary>TimeManager의 캐릭터 시간 배율을 Animator에 반영합니다.</summary>

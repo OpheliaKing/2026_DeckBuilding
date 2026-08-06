@@ -24,6 +24,7 @@ namespace SHIN
         private async System.Threading.Tasks.Task BattleStartTimingAsync()
         {
             await LoadCombatEventDataAsync();
+            await LoadBuffDataAsync();
             await RegisterAllItemEffectsAsync();
 
             // Owner 지정 없이 전체 BATTLE_START 효과 발동
@@ -248,6 +249,14 @@ namespace SHIN
         private void ActiveTurnStartEffect(CharacterBase character)
         {
             character?.TickBuffsOnTurnStart();
+
+            // 독 등으로 사망한 경우 즉시 처리
+            if (character != null && character.IsDead)
+            {
+                ProcessDeath(character);
+                return;
+            }
+
             character?.UnitInfo?.RefillCardCost();
 
             if (character != null)

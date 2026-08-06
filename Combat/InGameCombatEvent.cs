@@ -28,8 +28,8 @@ namespace SHIN
 
         [Tooltip("BUFF/DEBUFF일 때 적용할 능력치 종류")]
         [SerializeField]
-        private CARD_BUFF_EFFECT_TYPE _buffEffectType;
-        public CARD_BUFF_EFFECT_TYPE BuffEffectType => _buffEffectType;
+        private BUFF_EFFECT_TYPE _buffEffectType;
+        public BUFF_EFFECT_TYPE BuffEffectType => _buffEffectType;
 
         [Tooltip("BUFF/DEBUFF 지속 턴")]
         [SerializeField]

@@ -108,7 +108,7 @@ namespace SHIN
 
             int baseCost = Mathf.Max(0, _unitData.unitBaseMaxCardCost);
             // 아이템/버프로 최대 코스트 증가
-            int costBonus = Mathf.FloorToInt(GetBuffValueSum(CARD_BUFF_EFFECT_TYPE.MAX_COST_UP));
+            int costBonus = Mathf.FloorToInt(GetBuffValueSum(BUFF_EFFECT_TYPE.MAX_COST_UP));
             return Mathf.Max(0, baseCost + costBonus);
         }
 
@@ -317,17 +317,44 @@ namespace SHIN
         private readonly List<ActiveBuff> _activeBuffs = new();
         public IReadOnlyList<ActiveBuff> ActiveBuffs => _activeBuffs;
 
-        public void AddBuff(CARD_BUFF_EFFECT_TYPE effectType, float value, int duration, string sourceCardTid = null)
+        public void AddBuff(BuffData buffData, string sourceTid = null)
         {
-            if (effectType == CARD_BUFF_EFFECT_TYPE.NONE || duration <= 0)
+            if (buffData == null || !buffData.IsValid)
                 return;
+
+            string source = !string.IsNullOrEmpty(sourceTid)
+                ? sourceTid
+                : buffData.Tid;
+            AddBuff(buffData.EffectType, buffData.Value, buffData.Duration, source);
+        }
+
+        public void AddBuff(BUFF_EFFECT_TYPE effectType, float value, int duration, string sourceTid = null)
+        {
+            if (effectType == BUFF_EFFECT_TYPE.NONE || duration <= 0)
+                return;
+
+            // 방어도는 같은 타입끼리 합산해 관리
+            if (effectType == BUFF_EFFECT_TYPE.BLOCK)
+            {
+                for (int i = 0; i < _activeBuffs.Count; i++)
+                {
+                    if (_activeBuffs[i].EffectType != BUFF_EFFECT_TYPE.BLOCK)
+                        continue;
+
+                    _activeBuffs[i].Value += Mathf.Max(0f, value);
+                    _activeBuffs[i].RemainingTurns = Mathf.Max(_activeBuffs[i].RemainingTurns, duration);
+                    if (string.IsNullOrEmpty(_activeBuffs[i].SourceCardTid))
+                        _activeBuffs[i].SourceCardTid = sourceTid;
+                    return;
+                }
+            }
 
             _activeBuffs.Add(new ActiveBuff
             {
                 EffectType = effectType,
-                Value = value,
+                Value = Mathf.Max(0f, value),
                 RemainingTurns = duration,
-                SourceCardTid = sourceCardTid,
+                SourceCardTid = sourceTid,
             });
         }
 
@@ -349,7 +376,7 @@ namespace SHIN
             _activeBuffs.Clear();
         }
 
-        private float GetBuffValueSum(CARD_BUFF_EFFECT_TYPE effectType)
+        public float GetBuffValueSum(BUFF_EFFECT_TYPE effectType)
         {
             float sum = 0f;
             for (int i = 0; i < _activeBuffs.Count; i++)
@@ -359,6 +386,60 @@ namespace SHIN
             }
 
             return sum;
+        }
+
+        public int CurrentBlock => Mathf.FloorToInt(GetBuffValueSum(BUFF_EFFECT_TYPE.BLOCK));
+
+        /// <summary>
+        /// 데미지를 적용하고 실제 HP 감소량을 반환합니다.
+        /// BLOCK 방어도가 있으면 먼저 흡수합니다.
+        /// </summary>
+        public int ApplyDamage(int damage)
+        {
+            if (damage <= 0 || IsDead)
+                return 0;
+
+            int remaining = AbsorbDamageWithBlock(damage);
+            if (remaining <= 0)
+                return 0;
+
+            int before = _currentHp;
+            _currentHp = Mathf.Max(0, _currentHp - remaining);
+            return before - _currentHp;
+        }
+
+        private int AbsorbDamageWithBlock(int damage)
+        {
+            int remaining = damage;
+            for (int i = 0; i < _activeBuffs.Count && remaining > 0; i++)
+            {
+                var buff = _activeBuffs[i];
+                if (buff.EffectType != BUFF_EFFECT_TYPE.BLOCK || buff.Value <= 0f)
+                    continue;
+
+                int blockValue = Mathf.FloorToInt(buff.Value);
+                if (blockValue <= 0)
+                    continue;
+
+                int absorbed = Mathf.Min(blockValue, remaining);
+                buff.Value -= absorbed;
+                remaining -= absorbed;
+            }
+
+            CleanupDepletedBlockBuffs();
+            return remaining;
+        }
+
+        private void CleanupDepletedBlockBuffs()
+        {
+            for (int i = _activeBuffs.Count - 1; i >= 0; i--)
+            {
+                if (_activeBuffs[i].EffectType == BUFF_EFFECT_TYPE.BLOCK &&
+                    _activeBuffs[i].Value <= 0f)
+                {
+                    _activeBuffs.RemoveAt(i);
+                }
+            }
         }
 
         #endregion
@@ -442,19 +523,6 @@ namespace SHIN
         }
 
         /// <summary>
-        /// 데미지를 적용하고 실제 감소량을 반환합니다.
-        /// </summary>
-        public int ApplyDamage(int damage)
-        {
-            if (damage <= 0 || IsDead)
-                return 0;
-
-            int before = _currentHp;
-            _currentHp = Mathf.Max(0, _currentHp - damage);
-            return before - _currentHp;
-        }
-
-        /// <summary>
         /// 회복을 적용하고 실제 회복량을 반환합니다. 최대 체력을 넘지 않습니다.
         /// </summary>
         public int ApplyHeal(int amount)
@@ -475,9 +543,9 @@ namespace SHIN
                 Debug.LogError("UnitData is null");
                 return 0;
             }
-            ///아이템 계산 후 최대 체력 반환하도록 수정
+
             int baseHp = _unitData.unitBaseHp;
-            int hpBonus = Mathf.FloorToInt(GetBuffValueSum(CARD_BUFF_EFFECT_TYPE.HP_UP));
+            int hpBonus = Mathf.FloorToInt(GetBuffValueSum(BUFF_EFFECT_TYPE.HP_UP));
             return Mathf.Max(1, baseHp + hpBonus);
         }
 
@@ -488,9 +556,11 @@ namespace SHIN
                 Debug.LogError("UnitData is null");
                 return 0;
             }
-            ///아이템 계산 후 데미지 반환하도록 수정
+
             int baseAttack = _unitData.unitBaseAttack;
-            int attackBonus = Mathf.FloorToInt(GetBuffValueSum(CARD_BUFF_EFFECT_TYPE.ATTACK_UP));
+            int attackBonus = Mathf.FloorToInt(
+                GetBuffValueSum(BUFF_EFFECT_TYPE.ATTACK_UP) +
+                GetBuffValueSum(BUFF_EFFECT_TYPE.STRENGTH));
             return Mathf.Max(0, baseAttack + attackBonus);
         }
 
@@ -501,9 +571,9 @@ namespace SHIN
                 Debug.LogError("UnitData is null");
                 return 0;
             }
-            ///아이템 계산 후 방어력 반환하도록 수정
+
             int baseDefense = _unitData.unitBaseDefense;
-            int defenseBonus = Mathf.FloorToInt(GetBuffValueSum(CARD_BUFF_EFFECT_TYPE.DEFENSE_UP));
+            int defenseBonus = Mathf.FloorToInt(GetBuffValueSum(BUFF_EFFECT_TYPE.DEFENSE_UP));
             return Mathf.Max(0, baseDefense + defenseBonus);
         }
 
@@ -514,9 +584,9 @@ namespace SHIN
                 Debug.LogError("UnitData is null");
                 return 0;
             }
-            ///아이템 계산 후 속도 반환하도록 수정
+
             int baseSpeed = _unitData.unitBaseSpeed;
-            int speedBonus = Mathf.FloorToInt(GetBuffValueSum(CARD_BUFF_EFFECT_TYPE.SPEED_UP));
+            int speedBonus = Mathf.FloorToInt(GetBuffValueSum(BUFF_EFFECT_TYPE.SPEED_UP));
             return Mathf.Max(1, baseSpeed + speedBonus);
         }
 

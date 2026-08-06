@@ -48,6 +48,28 @@ namespace SHIN
         private string _animationName;
         public string AnimationName => _animationName;
 
+        #region RESOLVE
+
+        /// <summary>
+        /// 카드 효과가 적용되는 대상에게 스폰할 Addressables 이펙트 경로.
+        /// 공격 피격 대상 / 버프·디버프 적용 대상 공용.
+        /// </summary>
+        [FormerlySerializedAs("_hitEffectPath")]
+        [SerializeField]
+        private string _resolveEffectPath;
+        public string ResolveEffectPath => _resolveEffectPath;
+
+        /// <summary>
+        /// 카드 효과 적용 시 재생할 SE 경로.
+        /// 공격은 비우면 DefaultHitSe 사용, 버프·디버프는 설정된 경우만 재생.
+        /// </summary>
+        [FormerlySerializedAs("_hitSoundPath")]
+        [SerializeField]
+        private string _resolveSoundPath;
+        public string ResolveSoundPath => _resolveSoundPath;
+
+        #endregion
+
         #region ATTACK
 
         [SerializeField]
@@ -57,20 +79,6 @@ namespace SHIN
         [SerializeField]
         private bool _isRangeAttack;
         public bool IsRangeAttack => _isRangeAttack;
-
-        /// <summary>
-        /// 피격 대상 HitEffectPoint에 스폰할 Addressables 이펙트 경로.
-        /// </summary>
-        [SerializeField]
-        private string _hitEffectPath;
-        public string HitEffectPath => _hitEffectPath;
-
-        /// <summary>
-        /// 히트 판정 시 재생할 SE 경로. 비우면 DefaultHitSe 사용.
-        /// </summary>
-        [SerializeField]
-        private string _hitSoundPath;
-        public string HitSoundPath => _hitSoundPath;
 
         /// <summary>
         /// 공격 애니 파티클 오버라이드.
@@ -99,14 +107,104 @@ namespace SHIN
 
         #region BUFF
 
+        /// <summary>
+        /// 카드가 적용할 버프·디버프 목록. 항목마다 대상과 BuffDataSO tid를 지정합니다.
+        /// </summary>
         [SerializeField]
-        private CARD_BUFF_TARGET_TYPE _buffTargetType;
-        public CARD_BUFF_TARGET_TYPE BuffTargetType => _buffTargetType;
+        private List<CardBuffEntry> _buffEntries = new();
+        public IReadOnlyList<CardBuffEntry> BuffEntries => _buffEntries;
 
-        [SerializeField]
-        private CardBuffData _buffData;
-        public CardBuffData BuffData => _buffData;
+        [FormerlySerializedAs("_buffTargetType")]
+        [SerializeField, HideInInspector]
+        private CARD_BUFF_TARGET_TYPE _legacyBuffTargetType;
 
+        [FormerlySerializedAs("_buffData")]
+        [SerializeField, HideInInspector]
+        private BuffData _legacyBuffData;
+
+        /// <summary>
+        /// 클릭으로 대상 선택이 필요한 버프가 있는지.
+        /// </summary>
+        public bool NeedsBuffTargetSelection
+        {
+            get
+            {
+                if (_buffEntries == null)
+                    return false;
+
+                for (int i = 0; i < _buffEntries.Count; i++)
+                {
+                    var entry = _buffEntries[i];
+                    if (entry == null)
+                        continue;
+
+                    switch (entry.TargetType)
+                    {
+                        case CARD_BUFF_TARGET_TYPE.TEAM:
+                        case CARD_BUFF_TARGET_TYPE.ALL:
+                        case CARD_BUFF_TARGET_TYPE.ENEMY:
+                        case CARD_BUFF_TARGET_TYPE.ENEMY_ALL:
+                            return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 아군 대상 선택(팀 카메라)이 필요한지.
+        /// </summary>
+        public bool NeedsAllyBuffTargetSelection
+        {
+            get
+            {
+                if (_buffEntries == null)
+                    return false;
+
+                for (int i = 0; i < _buffEntries.Count; i++)
+                {
+                    var entry = _buffEntries[i];
+                    if (entry == null)
+                        continue;
+
+                    if (entry.TargetType == CARD_BUFF_TARGET_TYPE.TEAM ||
+                        entry.TargetType == CARD_BUFF_TARGET_TYPE.ALL)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 적 대상 선택이 필요한지.
+        /// </summary>
+        public bool NeedsEnemyBuffTargetSelection
+        {
+            get
+            {
+                if (_buffEntries == null)
+                    return false;
+
+                for (int i = 0; i < _buffEntries.Count; i++)
+                {
+                    var entry = _buffEntries[i];
+                    if (entry == null)
+                        continue;
+
+                    if (entry.TargetType == CARD_BUFF_TARGET_TYPE.ENEMY ||
+                        entry.TargetType == CARD_BUFF_TARGET_TYPE.ENEMY_ALL)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
 
         #endregion
 
@@ -117,17 +215,52 @@ namespace SHIN
         public void OnAfterDeserialize()
         {
             _attackEvents ??= new List<CardAttackEventData>();
-            if (_legacyAttackEvents == null || _legacyAttackEvents.Count == 0)
-                return;
+            _buffEntries ??= new List<CardBuffEntry>();
 
-            for (int i = 0; i < _legacyAttackEvents.Count; i++)
+            if (_legacyAttackEvents != null && _legacyAttackEvents.Count > 0)
             {
-                string eventTid = _legacyAttackEvents[i];
-                if (!string.IsNullOrEmpty(eventTid))
-                    _attackEvents.Add(new CardAttackEventData(eventTid));
+                for (int i = 0; i < _legacyAttackEvents.Count; i++)
+                {
+                    string eventTid = _legacyAttackEvents[i];
+                    if (!string.IsNullOrEmpty(eventTid))
+                        _attackEvents.Add(new CardAttackEventData(eventTid));
+                }
+
+                _legacyAttackEvents.Clear();
             }
 
-            _legacyAttackEvents.Clear();
+            // 구 CardBuffData 인라인 수치는 tid 변환이 불가합니다.
+            // 기존 카드는 CardDataSO에서 BuffEntries + BuffDataSO tid로 재설정합니다.
+            _ = _legacyBuffTargetType;
+            _ = _legacyBuffData;
+        }
+    }
+
+    [Serializable]
+    public class CardBuffEntry
+    {
+        [Tooltip("이 버프를 적용할 카드 대상 범위")]
+        [SerializeField]
+        private CARD_BUFF_TARGET_TYPE _targetType = CARD_BUFF_TARGET_TYPE.SELF;
+        public CARD_BUFF_TARGET_TYPE TargetType => _targetType;
+
+        [Tooltip("BuffDataSO에서 조회할 버프 tid")]
+        [SerializeField]
+        private string _buffTid;
+        public string BuffTid => _buffTid;
+
+        public bool IsValid =>
+            _targetType != CARD_BUFF_TARGET_TYPE.NONE &&
+            !string.IsNullOrEmpty(_buffTid);
+
+        public CardBuffEntry()
+        {
+        }
+
+        public CardBuffEntry(CARD_BUFF_TARGET_TYPE targetType, string buffTid)
+        {
+            _targetType = targetType;
+            _buffTid = buffTid;
         }
     }
 
@@ -186,12 +319,14 @@ namespace SHIN
 
     public enum CARD_TYPE
     {
-        NONE,
-        ATTACK,
-        DEFENSE,
-        BUFF,
-        DEBUFF,
-        SPECIAL,
+        NONE = 0,
+        ATTACK = 1,
+        DEFENSE = 2,
+        /// <summary>아군 버프. 선택 시 팀 카메라 사용.</summary>
+        BUFF = 3,
+        /// <summary>적 디버프. 적 대상 선택(전투 카메라) 사용.</summary>
+        DEBUFF = 4,
+        SPECIAL = 5,
     }
 
     public enum CARD_BUFF_TARGET_TYPE
@@ -200,31 +335,37 @@ namespace SHIN
         SELF,
         TEAM,
         ALL,
+        ENEMY,
+        ENEMY_ALL,
     }
 
-    public enum CARD_BUFF_EFFECT_TYPE
+    public static class CardTypeUtility
     {
-        NONE,
-        ATTACK_UP,
-        DEFENSE_UP,
-        HP_UP,
-        SPEED_UP,
-        MAX_COST_UP,
-        CUSTOM,
-    }
+        /// <summary>버프·디버프 카드 (BuffEntries 사용).</summary>
+        public static bool UsesBuffEntries(CARD_TYPE cardType)
+        {
+            return cardType == CARD_TYPE.BUFF || cardType == CARD_TYPE.DEBUFF;
+        }
 
-    [Serializable]
-    public class CardBuffData
-    {
-        [SerializeField]
-        private CARD_BUFF_EFFECT_TYPE _buffEffectType;
-        public CARD_BUFF_EFFECT_TYPE BuffEffectType => _buffEffectType;
-        [SerializeField]
-        private float _buffEffectValue;
-        public float BuffEffectValue => _buffEffectValue;
+        public static bool UsesAttackFields(CARD_TYPE cardType)
+        {
+            return cardType == CARD_TYPE.ATTACK;
+        }
 
-        [SerializeField]
-        private int _buffEffectDuration;
-        public int BuffEffectDuration => _buffEffectDuration;
+        public static bool IsBuff(CARD_TYPE cardType) => cardType == CARD_TYPE.BUFF;
+
+        public static bool IsDebuff(CARD_TYPE cardType) => cardType == CARD_TYPE.DEBUFF;
+
+        /// <summary>
+        /// 아군 팀 타겟 카메라 사용 여부.
+        /// CardType.BUFF면 항상 켠다 (엔트리 TargetType과 무관).
+        /// </summary>
+        public static bool ShouldUseAllyTargetCamera(CARD_TYPE cardType)
+        {
+            return cardType == CARD_TYPE.BUFF;
+        }
+
+        /// <summary>레거시 호환. DEBUFF를 BUFF로 합치지 않고 그대로 반환.</summary>
+        public static CARD_TYPE Normalize(CARD_TYPE cardType) => cardType;
     }
 }

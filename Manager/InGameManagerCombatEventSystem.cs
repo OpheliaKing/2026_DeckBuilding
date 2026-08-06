@@ -8,6 +8,7 @@ namespace SHIN
         private const int MaxCombatEventDepth = 4;
 
         private InGameCombatEventSO _inGameCombatEventSO;
+        private BuffDataSO _buffDataSO;
         private int _combatEventDepth;
 
         private async System.Threading.Tasks.Task LoadCombatEventDataAsync()
@@ -20,6 +21,35 @@ namespace SHIN
 
             if (_inGameCombatEventSO == null)
                 Debug.LogError("[CombatEvent] InGameCombatEventSO 로드 실패");
+        }
+
+        private async System.Threading.Tasks.Task LoadBuffDataAsync()
+        {
+            if (_buffDataSO != null)
+                return;
+
+            _buffDataSO = await GameManager.Instance.GetSOAsync<BuffDataSO>(
+                PublicVariable.Address.BuffDataSO);
+
+            if (_buffDataSO == null)
+                Debug.LogError("[Buff] BuffDataSO 로드 실패");
+        }
+
+        private bool TryGetBuffData(string buffTid, out BuffData buffData)
+        {
+            buffData = null;
+
+            if (string.IsNullOrEmpty(buffTid))
+                return false;
+
+            if (_buffDataSO == null &&
+                !GameManager.Instance.TryGetSO(PublicVariable.Address.BuffDataSO, out _buffDataSO))
+            {
+                Debug.LogError($"[Buff] BuffDataSO가 로드되지 않았습니다: {buffTid}");
+                return false;
+            }
+
+            return _buffDataSO != null && _buffDataSO.TryGetBuffData(buffTid, out buffData);
         }
 
         private void ExecuteCombatEventTids(
@@ -311,7 +341,7 @@ namespace SHIN
             InGameCombatEvent combatEvent,
             float effectiveValue)
         {
-            if (combatEvent.BuffEffectType == CARD_BUFF_EFFECT_TYPE.NONE ||
+            if (combatEvent.BuffEffectType == BUFF_EFFECT_TYPE.NONE ||
                 combatEvent.Duration <= 0)
             {
                 Debug.LogWarning(

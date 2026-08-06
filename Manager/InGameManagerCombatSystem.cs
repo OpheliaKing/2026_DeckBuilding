@@ -144,8 +144,9 @@ namespace SHIN
         {
             _isWaitingForTarget = true;
 
-            // 버프만 팀 카메라 사용. 다른 카드로 전환 시 반드시 끔.
-            bool useBuffCamera = card != null && card.CardType == CARD_TYPE.BUFF;
+            // BUFF 카드만 팀 카메라. DEBUFF/ATTACK 등은 끈다.
+            bool useBuffCamera = card != null &&
+                                 CardTypeUtility.ShouldUseAllyTargetCamera(card.CardType);
             SetBuffTargetCameraActive(useBuffCamera);
 
             Debug.Log($"[Combat] 대상 선택 대기 중... (타입: {card?.CardType}) / 우클릭·Esc 취소");
@@ -155,7 +156,11 @@ namespace SHIN
         {
             var teamCamera = _playerGroupPosition?.TeamTargrtCamera;
             if (teamCamera == null)
+            {
+                if (active)
+                    Debug.LogWarning("[Combat] Player GroupPosition에 TeamTargetCamera가 없습니다.");
                 return;
+            }
 
             teamCamera.gameObject.SetActive(active);
         }
@@ -223,7 +228,7 @@ namespace SHIN
             }
             else if (!IsValidTarget(CurrentActor, target, _selectedCard))
             {
-                if (_selectedCard.CardType == CARD_TYPE.BUFF)
+                if (CardTypeUtility.UsesBuffEntries(_selectedCard.CardType))
                 {
                     // TODO: 잘못된 대상 UI 표시
                     return;
@@ -237,7 +242,7 @@ namespace SHIN
             var user = CurrentActor;
             var card = _selectedCard;
             var playedCardObject = _selectedCardObject;
-            bool keepBuffCamera = card.CardType == CARD_TYPE.BUFF;
+            bool keepBuffCamera = CardTypeUtility.ShouldUseAllyTargetCamera(card.CardType);
             ClearCardSelection(keepBuffCamera);
 
             UseCard(user, target, card, playedCardObject);
@@ -423,7 +428,7 @@ namespace SHIN
 
         private void DeactivateBuffTargetCameraIfNeeded(CardData card)
         {
-            if (card != null && card.CardType == CARD_TYPE.BUFF)
+            if (card != null && CardTypeUtility.ShouldUseAllyTargetCamera(card.CardType))
                 SetBuffTargetCameraActive(false);
         }
 
@@ -460,7 +465,7 @@ namespace SHIN
                     session.TotalDamage = session.AttackTotalDamages[session.AttackTargets[0]];
                 }
             }
-            else if (card.CardType == CARD_TYPE.BUFF)
+            else if (CardTypeUtility.UsesBuffEntries(card.CardType))
             {
                 session.BuffTargets = BuildBuffTargets(user, target, card);
             }
@@ -498,16 +503,42 @@ namespace SHIN
         private List<CharacterBase> BuildBuffTargets(CharacterBase user, CharacterBase clickedTarget, CardData card)
         {
             var targets = new List<CharacterBase>();
-
-            if (card == null)
+            if (card?.BuffEntries == null)
                 return targets;
 
-            switch (card.BuffTargetType)
+            for (int i = 0; i < card.BuffEntries.Count; i++)
+            {
+                var entry = card.BuffEntries[i];
+                if (entry == null || !entry.IsValid)
+                    continue;
+
+                AddBuffTargetsByType(targets, user, clickedTarget, entry.TargetType);
+            }
+
+            return targets;
+        }
+
+        private void AddBuffTargetsByType(
+            List<CharacterBase> targets,
+            CharacterBase user,
+            CharacterBase clickedTarget,
+            CARD_BUFF_TARGET_TYPE targetType)
+        {
+            switch (targetType)
             {
                 case CARD_BUFF_TARGET_TYPE.SELF:
+                    if (user != null && user.IsAlive && !targets.Contains(user))
+                        targets.Add(user);
+                    break;
+
                 case CARD_BUFF_TARGET_TYPE.TEAM:
-                    if (clickedTarget != null && clickedTarget.IsAlive)
+                    if (clickedTarget != null &&
+                        clickedTarget.IsAlive &&
+                        IsPlayerCharacter(user) == IsPlayerCharacter(clickedTarget) &&
+                        !targets.Contains(clickedTarget))
+                    {
                         targets.Add(clickedTarget);
+                    }
                     break;
 
                 case CARD_BUFF_TARGET_TYPE.ALL:
@@ -517,14 +548,35 @@ namespace SHIN
                         for (int i = 0; i < allies.Count; i++)
                         {
                             var ally = allies[i];
-                            if (ally != null && ally.IsAlive)
+                            if (ally != null && ally.IsAlive && !targets.Contains(ally))
                                 targets.Add(ally);
                         }
                     }
                     break;
-            }
 
-            return targets;
+                case CARD_BUFF_TARGET_TYPE.ENEMY:
+                    if (clickedTarget != null &&
+                        clickedTarget.IsAlive &&
+                        IsPlayerCharacter(user) != IsPlayerCharacter(clickedTarget) &&
+                        !targets.Contains(clickedTarget))
+                    {
+                        targets.Add(clickedTarget);
+                    }
+                    break;
+
+                case CARD_BUFF_TARGET_TYPE.ENEMY_ALL:
+                    {
+                        bool userIsPlayer = IsPlayerCharacter(user);
+                        var enemies = userIsPlayer ? _enemyCharacters : _playerCharacters;
+                        for (int i = 0; i < enemies.Count; i++)
+                        {
+                            var enemy = enemies[i];
+                            if (enemy != null && enemy.IsAlive && !targets.Contains(enemy))
+                                targets.Add(enemy);
+                        }
+                    }
+                    break;
+            }
         }
 
         private void ApplyImmediateCardEffect(CardResolveSession session)
@@ -532,7 +584,7 @@ namespace SHIN
             if (session == null)
                 return;
 
-            switch (session.Card.CardType)
+            switch (CardTypeUtility.Normalize(session.Card.CardType))
             {
                 case CARD_TYPE.ATTACK:
                     ApplyAttackHitDamage(session, session.TotalDamage, CameraShakeLevel.None, isLastHit: true);
@@ -541,10 +593,8 @@ namespace SHIN
                     Debug.Log($"[Combat][DEFENSE] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} (구현 예정)");
                     break;
                 case CARD_TYPE.BUFF:
-                    ApplyBuffEffect(session);
-                    break;
                 case CARD_TYPE.DEBUFF:
-                    Debug.Log($"[Combat][DEBUFF] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} (구현 예정)");
+                    ApplyBuffEffect(session);
                     break;
                 case CARD_TYPE.SPECIAL:
                     Debug.Log($"[Combat][SPECIAL] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} (구현 예정)");
@@ -602,10 +652,8 @@ namespace SHIN
                     HandleAnimHit(session, cameraShake);
                     break;
                 case CombatJudgmentType.Buff:
-                    HandleAnimBuff(session);
-                    break;
                 case CombatJudgmentType.Debuff:
-                    Debug.Log($"[Combat][Anim][DEBUFF] {card.Name} (구현 예정)");
+                    HandleAnimBuff(session);
                     break;
                 case CombatJudgmentType.Defense:
                     Debug.Log($"[Combat][Anim][DEFENSE] {card.Name} (구현 예정)");
@@ -675,18 +723,18 @@ namespace SHIN
             bool hasAttackTargets = targets != null && targets.Count > 0;
             int targetCount = hasAttackTargets ? targets.Count : 1;
 
-            string hitEffectPath = string.IsNullOrEmpty(session.Card.HitEffectPath)
+            string resolveEffectPath = string.IsNullOrEmpty(session.Card.ResolveEffectPath)
                 ? PublicVariable.Address.DefaultHitEffectPrefab
-                : session.Card.HitEffectPath;
-            string hitSoundPath = string.IsNullOrEmpty(session.Card.HitSoundPath)
+                : session.Card.ResolveEffectPath;
+            string resolveSoundPath = string.IsNullOrEmpty(session.Card.ResolveSoundPath)
                 ? PublicVariable.Address.DefaultHitSe
-                : session.Card.HitSoundPath;
+                : session.Card.ResolveSoundPath;
 
-            bool shouldPlayHitSound =
+            bool shouldPlayResolveSound =
                 !session.Card.IsRangeAttack || !session.RangeHitSoundPlayed;
-            if (shouldPlayHitSound && !string.IsNullOrEmpty(hitSoundPath))
+            if (shouldPlayResolveSound && !string.IsNullOrEmpty(resolveSoundPath))
             {
-                GameManager.Instance?.SoundManager?.PlaySe(hitSoundPath);
+                GameManager.Instance?.SoundManager?.PlaySe(resolveSoundPath);
                 if (session.Card.IsRangeAttack)
                     session.RangeHitSoundPlayed = true;
             }
@@ -704,10 +752,10 @@ namespace SHIN
                 foundTarget = true;
                 hitTargets.Add(target);
                 target.PlayHitAnimation();
-                target.SpawnHitEffect(hitEffectPath);
+                target.SpawnHitEffect(resolveEffectPath);
 
                 int targetDamage = GetAttackHitDamage(session, target, hitIndex, damage);
-                int applied = target.TakeDamage(targetDamage);
+                int applied = target.TakeDamage(targetDamage, session.User);
                 appliedThisHit += applied;
                 session.AppliedDamageTotal += applied;
                 Debug.Log(
@@ -958,7 +1006,7 @@ namespace SHIN
 
         private void HandleAnimBuff(CardResolveSession session)
         {
-            if (session?.Card == null || session.Card.CardType != CARD_TYPE.BUFF)
+            if (session?.Card == null || !CardTypeUtility.UsesBuffEntries(session.Card.CardType))
                 return;
 
             ApplyBuffEffect(session);
@@ -966,30 +1014,109 @@ namespace SHIN
 
         private void ApplyBuffEffect(CardResolveSession session)
         {
-            if (session?.Card == null || session.Card.CardType != CARD_TYPE.BUFF)
+            if (session?.Card == null || !CardTypeUtility.UsesBuffEntries(session.Card.CardType))
                 return;
 
-            var buffData = session.Card.BuffData;
-            if (buffData == null || buffData.BuffEffectType == CARD_BUFF_EFFECT_TYPE.NONE)
+            var buffEntries = session.Card.BuffEntries;
+            if (buffEntries == null || buffEntries.Count == 0)
             {
-                Debug.LogWarning($"[Combat][BUFF] 버프 데이터 없음: {session.Card.Name}");
-                return;
-            }
-
-            if (session.BuffTargets == null || session.BuffTargets.Count == 0)
-            {
-                Debug.LogWarning($"[Combat][BUFF] 적용 대상 없음: {session.Card.Name}");
+                Debug.LogWarning($"[Combat][BUFF] 버프 목록 없음: {session.Card.Name}");
                 return;
             }
 
-            for (int i = 0; i < session.BuffTargets.Count; i++)
+            bool appliedAny = false;
+            bool resolveSoundPlayed = false;
+            var presentedTargets = new HashSet<CharacterBase>();
+
+            for (int i = 0; i < buffEntries.Count; i++)
             {
-                var target = session.BuffTargets[i];
-                if (target == null || target.IsDead)
+                var entry = buffEntries[i];
+                if (entry == null || !entry.IsValid)
                     continue;
 
-                target.ApplyBuffFromCard(session.Card);
+                if (!TryGetBuffData(entry.BuffTid, out var buffData) ||
+                    buffData == null ||
+                    !buffData.IsValid)
+                {
+                    Debug.LogWarning(
+                        $"[Combat][BUFF] BuffData 없음: card={session.Card.Tid} / buff={entry.BuffTid}");
+                    continue;
+                }
+
+                var targets = new List<CharacterBase>();
+                AddBuffTargetsByType(
+                    targets,
+                    session.User,
+                    session.Target,
+                    entry.TargetType);
+
+                if (targets.Count == 0)
+                {
+                    Debug.LogWarning(
+                        $"[Combat][BUFF] 적용 대상 없음: {session.Card.Name} / {entry.TargetType}");
+                    continue;
+                }
+
+                if (!resolveSoundPlayed)
+                {
+                    PlayCardResolveSound(session.Card, useAttackDefault: false);
+                    resolveSoundPlayed = true;
+                }
+
+                for (int t = 0; t < targets.Count; t++)
+                {
+                    var target = targets[t];
+                    if (target == null || target.IsDead)
+                        continue;
+
+                    if (presentedTargets.Add(target))
+                        PlayCardResolveEffect(target, session.Card, useAttackDefault: false);
+
+                    target.ApplyBuffData(buffData, session.Card.Tid);
+                    appliedAny = true;
+                }
             }
+
+            if (!appliedAny)
+                Debug.LogWarning($"[Combat][BUFF] 적용된 버프 없음: {session.Card.Name}");
+        }
+
+        private void PlayCardResolveEffect(
+            CharacterBase target,
+            CardData card,
+            bool useAttackDefault)
+        {
+            if (target == null || card == null)
+                return;
+
+            string effectPath = card.ResolveEffectPath;
+            if (string.IsNullOrEmpty(effectPath))
+            {
+                if (!useAttackDefault)
+                    return;
+
+                effectPath = PublicVariable.Address.DefaultHitEffectPrefab;
+            }
+
+            target.SpawnHitEffect(effectPath);
+        }
+
+        private void PlayCardResolveSound(CardData card, bool useAttackDefault)
+        {
+            if (card == null)
+                return;
+
+            string soundPath = card.ResolveSoundPath;
+            if (string.IsNullOrEmpty(soundPath))
+            {
+                if (!useAttackDefault)
+                    return;
+
+                soundPath = PublicVariable.Address.DefaultHitSe;
+            }
+
+            if (!string.IsNullOrEmpty(soundPath))
+                GameManager.Instance?.SoundManager?.PlaySe(soundPath);
         }
 
         private void FinishCardResolve(CardResolveSession session)
@@ -1043,14 +1170,14 @@ namespace SHIN
             switch (card.CardType)
             {
                 case CARD_TYPE.ATTACK:
-                case CARD_TYPE.DEBUFF:
                     return !sameTeam;
 
                 case CARD_TYPE.DEFENSE:
                     return sameTeam;
 
                 case CARD_TYPE.BUFF:
-                    return IsValidBuffTarget(user, target, card);
+                case CARD_TYPE.DEBUFF:
+                    return IsValidBuffOrDebuffTarget(user, target, card);
 
                 case CARD_TYPE.SPECIAL:
                     return true;
@@ -1073,25 +1200,59 @@ namespace SHIN
             return false;
         }
 
-        private bool IsValidBuffTarget(CharacterBase user, CharacterBase target, CardData card)
+        private bool IsValidBuffOrDebuffTarget(CharacterBase user, CharacterBase target, CardData card)
         {
             if (user == null || target == null || card == null || target.IsDead)
                 return false;
 
             bool sameTeam = IsPlayerCharacter(user) == IsPlayerCharacter(target);
-            if (!sameTeam)
+
+            // CardType으로 기본 진영을 제한 (버프=아군, 디버프=적)
+            if (card.CardType == CARD_TYPE.BUFF && !sameTeam)
+                return false;
+            if (card.CardType == CARD_TYPE.DEBUFF && sameTeam)
                 return false;
 
-            switch (card.BuffTargetType)
+            if (!card.NeedsBuffTargetSelection)
             {
-                case CARD_BUFF_TARGET_TYPE.SELF:
+                if (card.CardType == CARD_TYPE.BUFF)
                     return target == user;
-                case CARD_BUFF_TARGET_TYPE.TEAM:
-                case CARD_BUFF_TARGET_TYPE.ALL:
-                    return true;
-                default:
-                    return false;
+                // 디버프 + 엔트리 없으면 적 클릭만으로 허용
+                return !sameTeam;
             }
+
+            var buffEntries = card.BuffEntries;
+            if (buffEntries == null || buffEntries.Count == 0)
+                return false;
+
+            for (int i = 0; i < buffEntries.Count; i++)
+            {
+                var entry = buffEntries[i];
+                if (entry == null)
+                    continue;
+
+                switch (entry.TargetType)
+                {
+                    case CARD_BUFF_TARGET_TYPE.SELF:
+                        if (card.CardType == CARD_TYPE.BUFF && target == user)
+                            return true;
+                        break;
+
+                    case CARD_BUFF_TARGET_TYPE.TEAM:
+                    case CARD_BUFF_TARGET_TYPE.ALL:
+                        if (card.CardType == CARD_TYPE.BUFF && sameTeam)
+                            return true;
+                        break;
+
+                    case CARD_BUFF_TARGET_TYPE.ENEMY:
+                    case CARD_BUFF_TARGET_TYPE.ENEMY_ALL:
+                        if (card.CardType == CARD_TYPE.DEBUFF && !sameTeam)
+                            return true;
+                        break;
+                }
+            }
+
+            return false;
         }
 
         public void CancelCardSelection()
@@ -1137,9 +1298,29 @@ namespace SHIN
 
         private int CalculateDamage(CharacterBase attacker, CharacterBase defender, CardData card)
         {
-            float multiplier = card.AttackMultiplier > 0f ? card.AttackMultiplier : 1f;
+            if (attacker?.UnitInfo == null || defender?.UnitInfo == null)
+                return 0;
+
+            float multiplier = card != null && card.AttackMultiplier > 0f
+                ? card.AttackMultiplier
+                : 1f;
+
+            // 기본 공격력(ATTACK_UP + STRENGTH 포함) × 카드 배율
             float raw = attacker.UnitInfo.CurrentAttack * multiplier;
+
+            // WEAK: 주는 피해 % 감소 (value=25 → 25%)
+            float weakPercent = attacker.UnitInfo.GetBuffValueSum(BUFF_EFFECT_TYPE.WEAK);
+            if (weakPercent > 0f)
+                raw *= Mathf.Max(0f, 1f - weakPercent / 100f);
+
             int damage = Mathf.FloorToInt(raw) - defender.UnitInfo.CurrentDefense;
+            damage = Mathf.Max(0, damage);
+
+            // VULNERABLE: 받는 피해 % 증가 (value=50 → 50%)
+            float vulnerablePercent = defender.UnitInfo.GetBuffValueSum(BUFF_EFFECT_TYPE.VULNERABLE);
+            if (vulnerablePercent > 0f && damage > 0)
+                damage = Mathf.FloorToInt(damage * (1f + vulnerablePercent / 100f));
+
             return Mathf.Max(0, damage);
         }
 

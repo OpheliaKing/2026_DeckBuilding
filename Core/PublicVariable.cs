@@ -16,6 +16,7 @@ namespace SHIN
             public const string EndingSequenceSO = "Assets/Addressables/SO/EndingSequenceSO.asset";
             public const string ItemEffectDataSO = "Assets/Addressables/SO/ItemEffectDataSO.asset";
             public const string InGameCombatEventSO = "Assets/Addressables/SO/InGameCombatEventSO.asset";
+            public const string BuffDataSO = "Assets/Addressables/SO/BuffDataSO.asset";
             public const string CharacterSelectDataSO = "Assets/Addressables/SO/CharacterSelectDataSO.asset";
             public const string WeaponDataSO = "Assets/Addressables/SO/WeaponDataSO.asset";
             public const string BGMDataSO = "Assets/Addressables/SO/BGMDataSO.asset";
@@ -82,7 +83,7 @@ namespace SHIN
                 "Assets/Addressables/Sound/Voice/";
             public const string DefaultHitEffectPrefab =
                 "Assets/Addressables/Prefab/Effect/Unit/Sword/effect_sword_slash_hit_001.prefab";
-            /// <summary>카드 HitSoundPath가 비어 있을 때 사용하는 기본 히트 SE</summary>
+            /// <summary>카드 ResolveSoundPath가 비어 있을 때 사용하는 기본 히트 SE</summary>
             public const string DefaultHitSe =
                 "Assets/Addressables/Sound/SE/Weapon/Sword/se_sword_hit_001.mp3";
             public const string UIAtlas = "Assets/Addressables/Atlas/UIAtlas.spriteatlasv2";

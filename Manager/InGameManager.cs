@@ -267,6 +267,7 @@ namespace SHIN
                     character.UnitInfo?.SetUnitType(UNIT_TYPE.NPC);
                     character.SetAIType(CHARACTER_AI_TYPE.AI);
                     ApplyUnitDefaultCards(character.UnitInfo, unitData, cardDataSO);
+                    character.SetupEnemyHealthBar();
                 }
             }
 

@@ -484,6 +484,8 @@ namespace SHIN
                     characters[i].ReleaseCombatEffects();
             }
 
+            CharacterBase.ReleaseDamageTextPool();
+
             ResourceManager.ReleaseInstance(_currentStageObject);
             _currentStageObject = null;
             _inGameManager = null;

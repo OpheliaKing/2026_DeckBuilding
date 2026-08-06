@@ -5,25 +5,18 @@ namespace SHIN
 {
     public partial class CharacterBase
     {
-        public void ApplyBuffFromCard(CardData card)
+        public void ApplyBuffData(BuffData buffData, string sourceTid = null)
         {
-            if (_unitInfo == null || card == null || card.CardType != CARD_TYPE.BUFF)
+            if (_unitInfo == null || buffData == null || !buffData.IsValid)
                 return;
-
-            var buffData = card.BuffData;
-            if (buffData == null || buffData.BuffEffectType == CARD_BUFF_EFFECT_TYPE.NONE)
-            {
-                Debug.LogWarning($"[Buff] 버프 데이터 없음: {card.Name}");
-                return;
-            }
 
             int oldSpeed = _unitInfo.CurrentSpeed;
-            _unitInfo.AddBuff(buffData.BuffEffectType, buffData.BuffEffectValue, buffData.BuffEffectDuration, card.Tid);
+            _unitInfo.AddBuff(buffData, sourceTid);
             int newSpeed = _unitInfo.CurrentSpeed;
 
             Debug.Log(
-                $"[Buff] {GetCharacterDisplayName()} ← {card.Name} / " +
-                $"{buffData.BuffEffectType} +{buffData.BuffEffectValue} / {buffData.BuffEffectDuration}턴");
+                $"[Buff] {GetCharacterDisplayName()} ← {sourceTid ?? buffData.Tid} / " +
+                $"{buffData.EffectType} +{buffData.Value} / {buffData.Duration}턴");
 
             if (oldSpeed != newSpeed)
                 GameManager.Instance?.InGameManager?.RecalculateAVOnSpeedChanged(this, oldSpeed, newSpeed);
@@ -33,6 +26,23 @@ namespace SHIN
         {
             if (_unitInfo == null)
                 return;
+
+            // 재생 → 독 → 지속시간 감소 순
+            int regen = Mathf.FloorToInt(_unitInfo.GetBuffValueSum(BUFF_EFFECT_TYPE.REGEN));
+            if (regen > 0 && IsAlive)
+            {
+                int healed = Heal(regen);
+                if (healed > 0)
+                    Debug.Log($"[Buff][REGEN] {GetCharacterDisplayName()} +{healed}");
+            }
+
+            int poison = Mathf.FloorToInt(_unitInfo.GetBuffValueSum(BUFF_EFFECT_TYPE.POISON));
+            if (poison > 0 && IsAlive)
+            {
+                int applied = TakeDamage(poison, null, triggerReactiveEffects: false);
+                if (applied > 0)
+                    Debug.Log($"[Buff][POISON] {GetCharacterDisplayName()} -{applied}");
+            }
 
             int oldSpeed = _unitInfo.CurrentSpeed;
             _unitInfo.TickBuffsOnTurnStart();
@@ -60,7 +70,7 @@ namespace SHIN
     [System.Serializable]
     public class ActiveBuff
     {
-        public CARD_BUFF_EFFECT_TYPE EffectType;
+        public BUFF_EFFECT_TYPE EffectType;
         public float Value;
         public int RemainingTurns;
         public string SourceCardTid;

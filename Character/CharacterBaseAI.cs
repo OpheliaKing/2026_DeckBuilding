@@ -173,9 +173,9 @@ namespace SHIN
             if (card == null || inGame == null)
                 return null;
 
-            // SELF 버프는 본인 고정
-            if (card.CardType == CARD_TYPE.BUFF &&
-                card.BuffTargetType == CARD_BUFF_TARGET_TYPE.SELF)
+            // SELF만 있는 버프는 본인 고정
+            if (CardTypeUtility.UsesBuffEntries(card.CardType) &&
+                !card.NeedsBuffTargetSelection)
             {
                 return IsAlive ? this : null;
             }
@@ -184,8 +184,9 @@ namespace SHIN
             if (candidates == null || candidates.Count == 0)
                 return null;
 
-            // 공격/디버프: 체력 낮은 적 우선 (간단한 기본 휴리스틱)
-            if (card.CardType == CARD_TYPE.ATTACK || card.CardType == CARD_TYPE.DEBUFF)
+            // 공격/적 대상 버프: 체력 낮은 적 우선
+            if (card.CardType == CARD_TYPE.ATTACK ||
+                (CardTypeUtility.UsesBuffEntries(card.CardType) && card.NeedsEnemyBuffTargetSelection))
             {
                 CharacterBase best = candidates[0];
                 for (int i = 1; i < candidates.Count; i++)
