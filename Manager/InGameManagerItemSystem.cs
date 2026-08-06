@@ -10,7 +10,6 @@ namespace SHIN
         /// <summary>Timing별 등록된 효과 (Owner + State)</summary>
         private readonly Dictionary<ITEM_EFFECT_TIMING, List<ActiveItemEffectEntry>> _itemEffectsByTiming = new();
 
-        private InGameCombatEventSO _inGameCombatEventSO;
         private int _itemEffectDepth;
 
         private sealed class ActiveItemEffectEntry
@@ -26,7 +25,6 @@ namespace SHIN
         {
             _itemEffectsByTiming.Clear();
             _itemEffectDepth = 0;
-            _inGameCombatEventSO = null;
 
             var itemEffectDataSO = await GameManager.Instance.GetSOAsync<ItemEffectDataSO>(
                 PublicVariable.Address.ItemEffectDataSO);
@@ -41,14 +39,6 @@ namespace SHIN
             if (itemDataSO == null)
             {
                 Debug.LogError("[ItemEffect] ItemDataSO 로드 실패");
-                return;
-            }
-
-            _inGameCombatEventSO = await GameManager.Instance.GetSOAsync<InGameCombatEventSO>(
-                PublicVariable.Address.InGameCombatEventSO);
-            if (_inGameCombatEventSO == null)
-            {
-                Debug.LogError("[ItemEffect] InGameCombatEventSO 로드 실패");
                 return;
             }
 
@@ -108,12 +98,12 @@ namespace SHIN
         /// 특정 Timing의 아이템 효과를 발동합니다.
         /// context.Owner가 있으면 해당 유닛 효과만, 없으면 등록된 전체 효과를 검사합니다.
         /// </summary>
-        public void FireItemEffects(ITEM_EFFECT_TIMING timing, ItemEffectContext context = null)
+        public void FireItemEffects(ITEM_EFFECT_TIMING timing, CombatEventContext context = null)
         {
             if (timing == ITEM_EFFECT_TIMING.NONE)
                 return;
 
-            if (context != null && context.FromItemEffect)
+            if (context != null && context.Origin == COMBAT_EVENT_ORIGIN.ITEM_EFFECT)
                 return;
 
             if (_itemEffectDepth >= MaxItemEffectDepth)
@@ -139,7 +129,7 @@ namespace SHIN
                     if (context?.Owner != null && entry.Owner != context.Owner)
                         continue;
 
-                    var effectContext = context ?? new ItemEffectContext();
+                    var effectContext = context ?? new CombatEventContext();
                     if (effectContext.Owner == null)
                         effectContext.Owner = entry.Owner;
                     if (effectContext.Source == null)
@@ -157,7 +147,7 @@ namespace SHIN
             }
         }
 
-        private bool TryPassItemEffectCondition(ActiveItemEffectState state, ItemEffectContext context)
+        private bool TryPassItemEffectCondition(ActiveItemEffectState state, CombatEventContext context)
         {
             var data = state.EffectData;
             var condition = data.EffectCondition;
@@ -238,204 +228,38 @@ namespace SHIN
             return hp >= absoluteHp;
         }
 
-        private void ExecuteItemCombatEvents(ItemEffectData effectData, ItemEffectContext context)
+        private void ExecuteItemCombatEvents(
+            ItemEffectData effectData,
+            CombatEventContext context)
         {
             var eventTids = effectData.InGameCombatEvents;
             if (eventTids == null || eventTids.Count == 0)
                 return;
 
-            if (_inGameCombatEventSO == null)
-            {
-                Debug.LogError("[ItemEffect] InGameCombatEventSO가 없어 이벤트를 실행할 수 없습니다.");
-                return;
-            }
-
             Debug.Log(
                 $"[ItemEffect] 발동: {effectData.Tid} / {effectData.EffectTiming} / " +
                 $"Owner={GetCombatName(context.Owner)}");
 
-            for (int i = 0; i < eventTids.Count; i++)
-            {
-                var eventTid = eventTids[i];
-                if (string.IsNullOrEmpty(eventTid))
-                    continue;
-
-                if (!_inGameCombatEventSO.TryGetCombatEvent(eventTid, out var combatEvent) || combatEvent == null)
-                {
-                    Debug.LogError(
-                        $"[ItemEffect] InGameCombatEvent를 찾을 수 없습니다: effect={effectData.Tid} / event={eventTid}");
-                    continue;
-                }
-
-                if (combatEvent.EventType == IN_GAME_COMBAT_EVENT_TYPE.NONE)
-                    continue;
-
-                ExecuteCombatEvent(combatEvent, context);
-            }
-        }
-
-        /// <summary>
-        /// InGameCombatEvent 실행. 구체 효과는 단계적으로 채웁니다.
-        /// 아이템에서 파생된 후속 Fire는 FromItemEffect로 막아 연쇄를 제한합니다.
-        /// </summary>
-        private void ExecuteCombatEvent(InGameCombatEvent combatEvent, ItemEffectContext context)
-        {
-            if (combatEvent == null || context == null)
-                return;
-
-            var targets = ResolveCombatEventTargets(combatEvent.TargetUnit, context);
-            if (targets.Count == 0)
-            {
-                Debug.LogWarning($"[CombatEvent] 대상 없음: {combatEvent.Tid} / {combatEvent.TargetUnit}");
-                return;
-            }
-
-            switch (combatEvent.EventType)
-            {
-                case IN_GAME_COMBAT_EVENT_TYPE.HEAL:
-                    ApplyCombatEventHeal(targets, Mathf.FloorToInt(combatEvent.Value));
-                    break;
-
-                case IN_GAME_COMBAT_EVENT_TYPE.DRAW_CARD:
-                    ApplyCombatEventDraw(targets, Mathf.FloorToInt(combatEvent.Value));
-                    break;
-
-                case IN_GAME_COMBAT_EVENT_TYPE.ATTACK:
-                case IN_GAME_COMBAT_EVENT_TYPE.ATTACK_PROJECTILE:
-                case IN_GAME_COMBAT_EVENT_TYPE.BUFF:
-                case IN_GAME_COMBAT_EVENT_TYPE.DEBUFF:
-                    // 상세 구현 예정. 지금은 로그로 흐름만 확인.
-                    Debug.Log(
-                        $"[CombatEvent] {combatEvent.EventType} / value={combatEvent.Value} / " +
-                        $"targets={targets.Count} (구현 예정)");
-                    break;
-
-                default:
-                    break;
-            }
-        }
-
-        private List<CharacterBase> ResolveCombatEventTargets(
-            IN_GAME_COMBAT_EVENT_TARGET_UNIT targetType,
-            ItemEffectContext context)
-        {
-            var result = new List<CharacterBase>();
-            var owner = context.Owner;
-            if (owner == null)
-                return result;
-
-            bool ownerIsPlayer = IsPlayerCharacter(owner);
-
-            switch (targetType)
-            {
-                case IN_GAME_COMBAT_EVENT_TARGET_UNIT.SELF:
-                    if (owner.IsAlive)
-                        result.Add(owner);
-                    break;
-
-                case IN_GAME_COMBAT_EVENT_TARGET_UNIT.TEAM:
-                    if (context.Target != null &&
-                        context.Target.IsAlive &&
-                        IsPlayerCharacter(context.Target) == ownerIsPlayer)
-                        result.Add(context.Target);
-                    else if (owner.IsAlive)
-                        result.Add(owner);
-                    break;
-
-                case IN_GAME_COMBAT_EVENT_TARGET_UNIT.TEAM_ALL:
-                    AddAliveFromList(ownerIsPlayer ? _playerCharacters : _enemyCharacters, result);
-                    break;
-
-                case IN_GAME_COMBAT_EVENT_TARGET_UNIT.ENEMY:
-                    if (context.Target != null &&
-                        context.Target.IsAlive &&
-                        IsPlayerCharacter(context.Target) != ownerIsPlayer)
-                        result.Add(context.Target);
-                    break;
-
-                case IN_GAME_COMBAT_EVENT_TARGET_UNIT.ENEMY_ALL:
-                    AddAliveFromList(ownerIsPlayer ? _enemyCharacters : _playerCharacters, result);
-                    break;
-
-                case IN_GAME_COMBAT_EVENT_TARGET_UNIT.ALL:
-                    AddAliveFromList(_playerCharacters, result);
-                    AddAliveFromList(_enemyCharacters, result);
-                    break;
-            }
-
-            return result;
-        }
-
-        private static void AddAliveFromList(IReadOnlyList<CharacterBase> source, List<CharacterBase> dest)
-        {
-            if (source == null)
-                return;
-
-            for (int i = 0; i < source.Count; i++)
-            {
-                var c = source[i];
-                if (c != null && c.IsAlive)
-                    dest.Add(c);
-            }
-        }
-
-        private void ApplyCombatEventHeal(List<CharacterBase> targets, int amount)
-        {
-            if (amount <= 0)
-                return;
-
-            for (int i = 0; i < targets.Count; i++)
-            {
-                var target = targets[i];
-                if (target == null || target.IsDead)
-                    continue;
-
-                int healed = target.Heal(amount);
-                Debug.Log(
-                    $"[CombatEvent][HEAL] {GetCombatName(target)} +{healed} " +
-                    $"(요청:{amount}) / HP:{target.UnitInfo.CurrentHp}/{target.UnitInfo.MaxHp}");
-
-                if (healed > 0)
-                    FireHealthThresholdItemEffects(target);
-            }
-        }
-
-        private void ApplyCombatEventDraw(List<CharacterBase> targets, int count)
-        {
-            if (count <= 0)
-                return;
-
-            for (int i = 0; i < targets.Count; i++)
-            {
-                var unitInfo = targets[i]?.UnitInfo;
-                if (unitInfo == null)
-                    continue;
-
-                var drawn = unitInfo.DrawCards(count);
-                if (IsPlayerCharacter(targets[i]) && PlayerUI != null)
-                {
-                    for (int d = 0; d < drawn.Count; d++)
-                        GameManager.Instance?.SoundManager?.PlaySe(PublicVariable.Address.SeCardDraw);
-
-                    PlayerUI.RefreshHand(unitInfo.Hand);
-                }
-
-                Debug.Log($"[CombatEvent][DRAW] {GetCombatName(targets[i])} +{drawn.Count}장");
-            }
+            var eventContext =
+                context.CopyWithOrigin(COMBAT_EVENT_ORIGIN.ITEM_EFFECT);
+            ExecuteCombatEventTids(eventTids, eventContext, $"ItemEffect:{effectData.Tid}");
         }
 
         /// <summary>
         /// 피격/체력 변동 후 HEALTH_LOW / HEALTH_HIGH 타이밍을 검사합니다.
         /// </summary>
-        private void FireHealthThresholdItemEffects(CharacterBase owner)
+        private void FireHealthThresholdItemEffects(
+            CharacterBase owner,
+            COMBAT_EVENT_ORIGIN origin = COMBAT_EVENT_ORIGIN.NONE)
         {
             if (owner == null || owner.IsDead)
                 return;
 
-            var ctx = new ItemEffectContext
+            var ctx = new CombatEventContext
             {
                 Owner = owner,
                 Source = owner,
+                Origin = origin,
             };
 
             FireItemEffects(ITEM_EFFECT_TIMING.HEALTH_LOW, ctx);

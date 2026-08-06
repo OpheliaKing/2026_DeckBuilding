@@ -1,24 +1,21 @@
 namespace SHIN
 {
     /// <summary>
-    /// 아이템 효과 발동/전투 이벤트 실행에 필요한 컨텍스트.
+    /// 기존 코드 호환용 아이템 컨텍스트.
+    /// 신규 전투 이벤트 코드는 CombatEventContext를 사용합니다.
     /// </summary>
-    public class ItemEffectContext
+    public class ItemEffectContext : CombatEventContext
     {
-        /// <summary>아이템을 보유한 유닛 (효과 검사 대상)</summary>
-        public CharacterBase Owner;
-
-        /// <summary>행동의 주체 (공격자, 카드 사용자 등)</summary>
-        public CharacterBase Source;
-
-        /// <summary>행동의 대상 (피격자 등)</summary>
-        public CharacterBase Target;
-
-        public CardData Card;
-        public int Damage;
-        public int HealAmount;
-
-        /// <summary>아이템 발동으로 생긴 후속 이벤트면 true (재진입 방지용)</summary>
-        public bool FromItemEffect;
+        public bool FromItemEffect
+        {
+            get => Origin == COMBAT_EVENT_ORIGIN.ITEM_EFFECT;
+            set
+            {
+                if (value)
+                    Origin = COMBAT_EVENT_ORIGIN.ITEM_EFFECT;
+                else if (Origin == COMBAT_EVENT_ORIGIN.ITEM_EFFECT)
+                    Origin = COMBAT_EVENT_ORIGIN.NONE;
+            }
+        }
     }
 }

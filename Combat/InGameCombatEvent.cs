@@ -25,6 +25,17 @@ namespace SHIN
         [SerializeField]
         private float _value;
         public float Value => _value;
+
+        [Tooltip("BUFF/DEBUFF일 때 적용할 능력치 종류")]
+        [SerializeField]
+        private CARD_BUFF_EFFECT_TYPE _buffEffectType;
+        public CARD_BUFF_EFFECT_TYPE BuffEffectType => _buffEffectType;
+
+        [Tooltip("BUFF/DEBUFF 지속 턴")]
+        [SerializeField]
+        private int _duration;
+        public int Duration => _duration;
+
         [SerializeField]
         private string _customString;
         public string CustomString => _customString;
@@ -50,5 +61,6 @@ namespace SHIN
         ENEMY,
         ENEMY_ALL,
         ALL,
+        AFFECTED_TARGETS,
     }
 }

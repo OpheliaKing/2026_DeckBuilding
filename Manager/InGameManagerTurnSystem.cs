@@ -23,6 +23,7 @@ namespace SHIN
         /// </summary>
         private async System.Threading.Tasks.Task BattleStartTimingAsync()
         {
+            await LoadCombatEventDataAsync();
             await RegisterAllItemEffectsAsync();
 
             // Owner 지정 없이 전체 BATTLE_START 효과 발동
@@ -251,7 +252,7 @@ namespace SHIN
 
             if (character != null)
             {
-                FireItemEffects(ITEM_EFFECT_TIMING.TURN_START, new ItemEffectContext
+                FireItemEffects(ITEM_EFFECT_TIMING.TURN_START, new CombatEventContext
                 {
                     Owner = character,
                     Source = character,
@@ -263,7 +264,7 @@ namespace SHIN
         {
             if (character != null)
             {
-                FireItemEffects(ITEM_EFFECT_TIMING.TURN_END, new ItemEffectContext
+                FireItemEffects(ITEM_EFFECT_TIMING.TURN_END, new CombatEventContext
                 {
                     Owner = character,
                     Source = character,

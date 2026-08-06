@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace SHIN
 {
     [Serializable]
-    public class CardData
+    public class CardData : ISerializationCallbackReceiver
     {
         [SerializeField]
         private string _tid;
@@ -80,11 +81,19 @@ namespace SHIN
         public string AttackParticlePath => _attackParticlePath;
 
         /// <summary>
-        /// 공격대상에게 주는 이벤트 목록
+        /// 공격 과정에서 실행할 전투 이벤트 목록.
+        /// 이벤트별 발동 시점, 대상, 확률, 수치 배율과 반복 여부를 설정합니다.
         /// </summary>
         [SerializeField]
-        private List<string> _attackEvent;
-        public IReadOnlyList<string> AttackEvent => _attackEvent;
+        private List<CardAttackEventData> _attackEvents = new();
+        public IReadOnlyList<CardAttackEventData> AttackEvents => _attackEvents;
+
+        /// <summary>
+        /// 기존 List&lt;string&gt; _attackEvent 데이터의 자동 마이그레이션용 필드.
+        /// </summary>
+        [FormerlySerializedAs("_attackEvent")]
+        [SerializeField, HideInInspector]
+        private List<string> _legacyAttackEvents;
 
         #endregion
 
@@ -100,6 +109,79 @@ namespace SHIN
 
 
         #endregion
+
+        public void OnBeforeSerialize()
+        {
+        }
+
+        public void OnAfterDeserialize()
+        {
+            _attackEvents ??= new List<CardAttackEventData>();
+            if (_legacyAttackEvents == null || _legacyAttackEvents.Count == 0)
+                return;
+
+            for (int i = 0; i < _legacyAttackEvents.Count; i++)
+            {
+                string eventTid = _legacyAttackEvents[i];
+                if (!string.IsNullOrEmpty(eventTid))
+                    _attackEvents.Add(new CardAttackEventData(eventTid));
+            }
+
+            _legacyAttackEvents.Clear();
+        }
+    }
+
+    [Serializable]
+    public class CardAttackEventData
+    {
+        [Tooltip("실행할 InGameCombatEventSO 이벤트 TID")]
+        [SerializeField]
+        private string _eventTid;
+        public string EventTid => _eventTid;
+
+        [Tooltip("NONE이면 InGameCombatEvent의 TargetUnit을 사용합니다.")]
+        [SerializeField]
+        private IN_GAME_COMBAT_EVENT_TARGET_UNIT _targetOverride;
+        public IN_GAME_COMBAT_EVENT_TARGET_UNIT TargetOverride => _targetOverride;
+
+        [Tooltip("이 이벤트가 실행될 공격 시점")]
+        [SerializeField]
+        private CARD_ATTACK_EVENT_TIMING _timing = CARD_ATTACK_EVENT_TIMING.FINAL_HIT;
+        public CARD_ATTACK_EVENT_TIMING Timing => _timing;
+
+        [Tooltip("발동 확률. 0은 발동하지 않고 1은 항상 발동합니다.")]
+        [Range(0f, 1f)]
+        [SerializeField]
+        private float _triggerChance = 1f;
+        public float TriggerChance => _triggerChance;
+
+        [Tooltip("InGameCombatEvent의 Value에 곱할 카드 전용 배율")]
+        [Min(0f)]
+        [SerializeField]
+        private float _valueMultiplier = 1f;
+        public float ValueMultiplier => _valueMultiplier;
+
+        [Tooltip("같은 공격 중 동일 이벤트가 여러 판정에서 반복 실행될 수 있는지 여부")]
+        [SerializeField]
+        private bool _allowRepeatedExecution;
+        public bool AllowRepeatedExecution => _allowRepeatedExecution;
+
+        public CardAttackEventData(string eventTid)
+        {
+            _eventTid = eventTid;
+            _timing = CARD_ATTACK_EVENT_TIMING.FINAL_HIT;
+            _triggerChance = 1f;
+            _valueMultiplier = 1f;
+        }
+    }
+
+    public enum CARD_ATTACK_EVENT_TIMING
+    {
+        /// <summary>기존 AttackEvent와 동일하게 마지막 Hit 후 한 번 실행.</summary>
+        FINAL_HIT = 0,
+        ATTACK_START,
+        EACH_HIT,
+        ON_KILL,
     }
 
     public enum CARD_TYPE

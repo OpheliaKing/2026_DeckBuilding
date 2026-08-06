@@ -45,6 +45,13 @@ namespace SHIN
             public int[] HitDamages;
             public int NextHitIndex;
             public bool SetupReceived;
+            public List<CharacterBase> AttackTargets;
+            public Dictionary<CharacterBase, int> AttackTotalDamages;
+            public Dictionary<CharacterBase, int[]> AttackHitDamages;
+            public bool RangeHitSoundPlayed;
+            public HashSet<CardAttackEventData> AttemptedAttackEvents;
+            public bool AttackEndItemEffectsFired;
+            public int AppliedDamageTotal;
             public List<CharacterBase> BuffTargets;
         }
 
@@ -362,6 +369,25 @@ namespace SHIN
 
             _isResolvingCard = true;
             _resolveSession = CreateResolveSession(user, target, card, playedCardObject);
+            if (card.CardType == CARD_TYPE.ATTACK)
+            {
+                FireItemEffects(ITEM_EFFECT_TIMING.ON_ATTACK_START, new CombatEventContext
+                {
+                    Owner = user,
+                    Source = user,
+                    Target = target,
+                    AffectedTargets = _resolveSession.AttackTargets,
+                    Card = card,
+                    Origin = COMBAT_EVENT_ORIGIN.CARD_ATTACK,
+                });
+
+                ExecuteCardAttackEvents(
+                    _resolveSession,
+                    CARD_ATTACK_EVENT_TIMING.ATTACK_START,
+                    _resolveSession.AttackTargets,
+                    _resolveSession.Target,
+                    0);
+            }
 
             bool hasAnim = !string.IsNullOrEmpty(card.AnimationName) &&
                            user.TryPlayCardAnimation(card.AnimationName);
@@ -413,12 +439,26 @@ namespace SHIN
                 Target = target,
                 Card = card,
                 PlayedCardObject = playedCardObject,
+                AttemptedAttackEvents = new HashSet<CardAttackEventData>(),
             };
 
             if (card.CardType == CARD_TYPE.ATTACK)
             {
-                int damage = CalculateDamage(user, target, card);
-                session.TotalDamage = ApplyAttackExtraEffects(user, target, card, damage);
+                session.AttackTargets = BuildAttackTargets(user, target, card);
+                session.AttackTotalDamages = new Dictionary<CharacterBase, int>();
+
+                for (int i = 0; i < session.AttackTargets.Count; i++)
+                {
+                    var attackTarget = session.AttackTargets[i];
+                    int damage = CalculateDamage(user, attackTarget, card);
+                    session.AttackTotalDamages[attackTarget] = damage;
+                }
+
+                if (!session.AttackTotalDamages.TryGetValue(target, out session.TotalDamage) &&
+                    session.AttackTargets.Count > 0)
+                {
+                    session.TotalDamage = session.AttackTotalDamages[session.AttackTargets[0]];
+                }
             }
             else if (card.CardType == CARD_TYPE.BUFF)
             {
@@ -426,6 +466,33 @@ namespace SHIN
             }
 
             return session;
+        }
+
+        private List<CharacterBase> BuildAttackTargets(
+            CharacterBase user,
+            CharacterBase clickedTarget,
+            CardData card)
+        {
+            var targets = new List<CharacterBase>();
+            if (user == null || card == null || card.CardType != CARD_TYPE.ATTACK)
+                return targets;
+
+            if (!card.IsRangeAttack)
+            {
+                if (clickedTarget != null && clickedTarget.IsAlive)
+                    targets.Add(clickedTarget);
+                return targets;
+            }
+
+            var enemies = IsPlayerCharacter(user) ? _enemyCharacters : _playerCharacters;
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                var enemy = enemies[i];
+                if (enemy != null && enemy.IsAlive && IsValidTarget(user, enemy, card))
+                    targets.Add(enemy);
+            }
+
+            return targets;
         }
 
         private List<CharacterBase> BuildBuffTargets(CharacterBase user, CharacterBase clickedTarget, CardData card)
@@ -505,6 +572,7 @@ namespace SHIN
             var weights = CombatDamageSplit.ParseWeightsCsv(ratiosCsv);
             _resolveSession.HitWeights = weights;
             _resolveSession.HitDamages = CombatDamageSplit.SplitByWeights(_resolveSession.TotalDamage, weights);
+            BuildAttackHitDamages(_resolveSession, weights);
             _resolveSession.NextHitIndex = 0;
             _resolveSession.SetupReceived = true;
 
@@ -561,6 +629,7 @@ namespace SHIN
             {
                 session.HitWeights = new[] { 1f };
                 session.HitDamages = new[] { session.TotalDamage };
+                BuildAttackHitDamages(session, session.HitWeights);
                 session.NextHitIndex = 0;
                 session.SetupReceived = true;
                 Debug.LogWarning("[Combat] HitWeights Setup 없이 Hit → 전체 데미지 1회 적용");
@@ -572,96 +641,319 @@ namespace SHIN
                 return;
             }
 
-            int portion = session.HitDamages[session.NextHitIndex];
+            int hitIndex = session.NextHitIndex;
+            int portion = session.HitDamages[hitIndex];
             session.NextHitIndex++;
             bool isLastHit = session.NextHitIndex >= session.HitDamages.Length;
-            ApplyAttackHitDamage(session, portion, cameraShake, isLastHit);
+            ApplyAttackHitDamage(session, portion, cameraShake, isLastHit, hitIndex);
+        }
+
+        private void BuildAttackHitDamages(CardResolveSession session, float[] weights)
+        {
+            if (session?.AttackTotalDamages == null)
+                return;
+
+            session.AttackHitDamages = new Dictionary<CharacterBase, int[]>();
+            foreach (var pair in session.AttackTotalDamages)
+            {
+                session.AttackHitDamages[pair.Key] =
+                    CombatDamageSplit.SplitByWeights(pair.Value, weights);
+            }
         }
 
         private void ApplyAttackHitDamage(
             CardResolveSession session,
             int damage,
             CameraShakeLevel cameraShake = CameraShakeLevel.None,
-            bool isLastHit = false)
+            bool isLastHit = false,
+            int hitIndex = -1)
         {
-            if (session?.Target == null || damage < 0)
+            if (session?.Target == null || damage < 0 || session.Card == null)
                 return;
 
-            // 판정 타이밍: Hit + 카메라 흔들기
-            session.Target.PlayHitAnimation();
+            var targets = session.AttackTargets;
+            bool hasAttackTargets = targets != null && targets.Count > 0;
+            int targetCount = hasAttackTargets ? targets.Count : 1;
 
-            if (session.Card != null)
+            string hitEffectPath = string.IsNullOrEmpty(session.Card.HitEffectPath)
+                ? PublicVariable.Address.DefaultHitEffectPrefab
+                : session.Card.HitEffectPath;
+            string hitSoundPath = string.IsNullOrEmpty(session.Card.HitSoundPath)
+                ? PublicVariable.Address.DefaultHitSe
+                : session.Card.HitSoundPath;
+
+            bool shouldPlayHitSound =
+                !session.Card.IsRangeAttack || !session.RangeHitSoundPlayed;
+            if (shouldPlayHitSound && !string.IsNullOrEmpty(hitSoundPath))
             {
-                string hitEffectPath = string.IsNullOrEmpty(session.Card.HitEffectPath)
-                    ? PublicVariable.Address.DefaultHitEffectPrefab
-                    : session.Card.HitEffectPath;
-                session.Target.SpawnHitEffect(hitEffectPath);
-
-                string hitSoundPath = string.IsNullOrEmpty(session.Card.HitSoundPath)
-                    ? PublicVariable.Address.DefaultHitSe
-                    : session.Card.HitSoundPath;
-                if (!string.IsNullOrEmpty(hitSoundPath))
-                    GameManager.Instance?.SoundManager?.PlaySe(hitSoundPath);
+                GameManager.Instance?.SoundManager?.PlaySe(hitSoundPath);
+                if (session.Card.IsRangeAttack)
+                    session.RangeHitSoundPlayed = true;
             }
 
-            int applied = session.Target.TakeDamage(damage);
-            Debug.Log(
-                $"[Combat][HIT] {GetCombatName(session.User)} → {GetCombatName(session.Target)} / {session.Card.Name} / " +
-                $"히트데미지:{applied} / 남은HP:{session.Target.UnitInfo.CurrentHp}");
+            bool foundTarget = false;
+            int appliedThisHit = 0;
+            var hitTargets = new List<CharacterBase>();
+            var killedTargets = new List<CharacterBase>();
+            for (int i = 0; i < targetCount; i++)
+            {
+                var target = hasAttackTargets ? targets[i] : session.Target;
+                if (target == null)
+                    continue;
 
-            if (cameraShake != CameraShakeLevel.None)
+                foundTarget = true;
+                hitTargets.Add(target);
+                target.PlayHitAnimation();
+                target.SpawnHitEffect(hitEffectPath);
+
+                int targetDamage = GetAttackHitDamage(session, target, hitIndex, damage);
+                int applied = target.TakeDamage(targetDamage);
+                appliedThisHit += applied;
+                session.AppliedDamageTotal += applied;
+                Debug.Log(
+                    $"[Combat][HIT] {GetCombatName(session.User)} → {GetCombatName(target)} / {session.Card.Name} / " +
+                    $"히트데미지:{applied} / 남은HP:{target.UnitInfo.CurrentHp}");
+
+                if (applied > 0)
+                {
+                    FireItemEffects(ITEM_EFFECT_TIMING.ON_TARGET_HIT, new CombatEventContext
+                    {
+                        Owner = session.User,
+                        Source = session.User,
+                        Target = target,
+                        AffectedTargets = session.AttackTargets,
+                        Card = session.Card,
+                        Damage = applied,
+                        Origin = COMBAT_EVENT_ORIGIN.CARD_ATTACK,
+                    });
+
+                    FireItemEffects(ITEM_EFFECT_TIMING.ON_DAMAGE, new CombatEventContext
+                    {
+                        Owner = target,
+                        Source = session.User,
+                        Target = target,
+                        AffectedTargets = session.AttackTargets,
+                        Card = session.Card,
+                        Damage = applied,
+                        Origin = COMBAT_EVENT_ORIGIN.CARD_ATTACK,
+                    });
+
+                    FireHealthThresholdItemEffects(target);
+                }
+
+                // 마지막 공격 판정에서만 사망 처리 (Die/디졸브)
+                if (isLastHit && target.IsDead)
+                {
+                    killedTargets.Add(target);
+                    FireItemEffects(ITEM_EFFECT_TIMING.ON_KILL, new CombatEventContext
+                    {
+                        Owner = session.User,
+                        Source = session.User,
+                        Target = target,
+                        Card = session.Card,
+                        Damage = applied,
+                    });
+
+                    FireItemEffects(ITEM_EFFECT_TIMING.ON_DEATH, new CombatEventContext
+                    {
+                        Owner = target,
+                        Source = session.User,
+                        Target = target,
+                        Card = session.Card,
+                        Damage = applied,
+                    });
+
+                    ProcessDeath(target);
+                }
+            }
+
+            if (foundTarget)
+            {
+                FireItemEffects(ITEM_EFFECT_TIMING.ON_HIT, new CombatEventContext
+                {
+                    Owner = session.User,
+                    Source = session.User,
+                    Target = session.Target,
+                    AffectedTargets = hitTargets,
+                    Card = session.Card,
+                    Damage = appliedThisHit,
+                    Origin = COMBAT_EVENT_ORIGIN.CARD_ATTACK,
+                });
+
+                ExecuteCardAttackEvents(
+                    session,
+                    CARD_ATTACK_EVENT_TIMING.EACH_HIT,
+                    hitTargets,
+                    session.Target,
+                    appliedThisHit);
+            }
+
+            if (isLastHit && killedTargets.Count > 0)
+            {
+                ExecuteCardAttackEvents(
+                    session,
+                    CARD_ATTACK_EVENT_TIMING.ON_KILL,
+                    killedTargets,
+                    killedTargets[0],
+                    appliedThisHit);
+            }
+
+            if (foundTarget && cameraShake != CameraShakeLevel.None)
             {
                 GameManager.Instance?.CameraManager?.Shake(cameraShake);
-                // 쉐이크와 같은 타이밍에 캐릭터 애니/이펙트 히트스톱
+                // 범위 공격도 판정 1회당 쉐이크/히트스톱은 한 번만 적용
                 GameManager.Instance?.TimeManager?.HitStop();
             }
 
-            if (applied > 0)
+            if (isLastHit)
             {
-                FireItemEffects(ITEM_EFFECT_TIMING.ON_ATTACK, new ItemEffectContext
-                {
-                    Owner = session.User,
-                    Source = session.User,
-                    Target = session.Target,
-                    Card = session.Card,
-                    Damage = applied,
-                });
+                ExecuteCardAttackEvents(
+                    session,
+                    CARD_ATTACK_EVENT_TIMING.FINAL_HIT,
+                    session.AttackTargets,
+                    session.Target,
+                    session.AppliedDamageTotal);
+                FireAttackEndItemEffects(session);
+            }
+        }
 
-                FireItemEffects(ITEM_EFFECT_TIMING.ON_DAMAGE, new ItemEffectContext
-                {
-                    Owner = session.Target,
-                    Source = session.User,
-                    Target = session.Target,
-                    Card = session.Card,
-                    Damage = applied,
-                });
-
-                FireHealthThresholdItemEffects(session.Target);
+        private void FireAttackEndItemEffects(CardResolveSession session)
+        {
+            if (session?.Card == null ||
+                session.Card.CardType != CARD_TYPE.ATTACK ||
+                session.AttackEndItemEffectsFired)
+            {
+                return;
             }
 
-            // 마지막 공격 판정에서만 사망 처리 (Die/디졸브)
-            if (isLastHit && session.Target.IsDead)
+            session.AttackEndItemEffectsFired = true;
+            FireItemEffects(ITEM_EFFECT_TIMING.ON_ATTACK_END, new CombatEventContext
             {
-                FireItemEffects(ITEM_EFFECT_TIMING.ON_KILL, new ItemEffectContext
-                {
-                    Owner = session.User,
-                    Source = session.User,
-                    Target = session.Target,
-                    Card = session.Card,
-                    Damage = applied,
-                });
+                Owner = session.User,
+                Source = session.User,
+                Target = session.Target,
+                AffectedTargets = session.AttackTargets,
+                Card = session.Card,
+                Damage = session.AppliedDamageTotal,
+                Origin = COMBAT_EVENT_ORIGIN.CARD_ATTACK,
+            });
+        }
 
-                FireItemEffects(ITEM_EFFECT_TIMING.ON_DEATH, new ItemEffectContext
-                {
-                    Owner = session.Target,
-                    Source = session.User,
-                    Target = session.Target,
-                    Card = session.Card,
-                    Damage = applied,
-                });
-
-                ProcessDeath(session.Target);
+        private int GetAttackHitDamage(
+            CardResolveSession session,
+            CharacterBase target,
+            int hitIndex,
+            int fallbackDamage)
+        {
+            if (session?.AttackHitDamages != null &&
+                hitIndex >= 0 &&
+                session.AttackHitDamages.TryGetValue(target, out var hitDamages) &&
+                hitIndex < hitDamages.Length)
+            {
+                return hitDamages[hitIndex];
             }
+
+            if (session?.AttackTotalDamages != null &&
+                session.AttackTotalDamages.TryGetValue(target, out int totalDamage))
+            {
+                return totalDamage;
+            }
+
+            return fallbackDamage;
+        }
+
+        private void ExecuteCardAttackEvents(
+            CardResolveSession session,
+            CARD_ATTACK_EVENT_TIMING timing,
+            IReadOnlyList<CharacterBase> affectedTargets,
+            CharacterBase primaryTarget,
+            int damage)
+        {
+            if (session?.Card == null || session.Card.CardType != CARD_TYPE.ATTACK)
+                return;
+
+            var attackEvents = session.Card.AttackEvents;
+            if (attackEvents == null || attackEvents.Count == 0)
+                return;
+
+            session.AttemptedAttackEvents ??= new HashSet<CardAttackEventData>();
+            for (int i = 0; i < attackEvents.Count; i++)
+            {
+                var eventData = attackEvents[i];
+                if (eventData == null ||
+                    eventData.Timing != timing ||
+                    string.IsNullOrEmpty(eventData.EventTid))
+                {
+                    continue;
+                }
+
+                if (!eventData.AllowRepeatedExecution)
+                {
+                    if (!session.AttemptedAttackEvents.Add(eventData))
+                        continue;
+                }
+
+                if (timing == CARD_ATTACK_EVENT_TIMING.ON_KILL &&
+                    eventData.AllowRepeatedExecution &&
+                    affectedTargets != null)
+                {
+                    for (int targetIndex = 0; targetIndex < affectedTargets.Count; targetIndex++)
+                    {
+                        var killedTarget = affectedTargets[targetIndex];
+                        if (killedTarget == null)
+                            continue;
+
+                        TryExecuteCardAttackEvent(
+                            session,
+                            eventData,
+                            timing,
+                            new[] { killedTarget },
+                            killedTarget,
+                            damage);
+                    }
+                    continue;
+                }
+
+                TryExecuteCardAttackEvent(
+                    session,
+                    eventData,
+                    timing,
+                    affectedTargets,
+                    primaryTarget,
+                    damage);
+            }
+        }
+
+        private void TryExecuteCardAttackEvent(
+            CardResolveSession session,
+            CardAttackEventData eventData,
+            CARD_ATTACK_EVENT_TIMING timing,
+            IReadOnlyList<CharacterBase> affectedTargets,
+            CharacterBase primaryTarget,
+            int damage)
+        {
+            float triggerChance = Mathf.Clamp01(eventData.TriggerChance);
+            if (triggerChance <= 0f ||
+                (triggerChance < 1f && Random.value > triggerChance))
+            {
+                return;
+            }
+
+            var context = new CombatEventContext
+            {
+                Owner = session.User,
+                Source = session.User,
+                Target = primaryTarget ?? session.Target,
+                AffectedTargets = affectedTargets,
+                Card = session.Card,
+                Damage = damage,
+                Origin = COMBAT_EVENT_ORIGIN.CARD_ATTACK,
+            };
+
+            ExecuteCardAttackEvent(
+                eventData,
+                context,
+                $"CardAttack:{session.Card.Tid}/{timing}");
         }
 
         private void HandleAnimBuff(CardResolveSession session)
@@ -720,14 +1012,19 @@ namespace SHIN
             if (IsPlayerCharacter(session.User))
                 PlayerUI?.RefreshCostUI();
 
+            if (session.Card != null && session.Card.CardType == CARD_TYPE.ATTACK)
+                FireAttackEndItemEffects(session);
+
             if (session.User != null)
             {
-                FireItemEffects(ITEM_EFFECT_TIMING.ON_USE_CARD, new ItemEffectContext
+                FireItemEffects(ITEM_EFFECT_TIMING.ON_USE_CARD, new CombatEventContext
                 {
                     Owner = session.User,
                     Source = session.User,
                     Target = session.Target,
+                    AffectedTargets = session.AttackTargets,
                     Card = session.Card,
+                    Damage = session.AppliedDamageTotal,
                 });
             }
 
@@ -844,38 +1141,6 @@ namespace SHIN
             float raw = attacker.UnitInfo.CurrentAttack * multiplier;
             int damage = Mathf.FloorToInt(raw) - defender.UnitInfo.CurrentDefense;
             return Mathf.Max(0, damage);
-        }
-
-        private int ApplyAttackExtraEffects(
-            CharacterBase attacker,
-            CharacterBase defender,
-            CardData card,
-            int damage)
-        {
-            if (card.AttackEvent == null || card.AttackEvent.Count == 0)
-                return damage;
-
-            for (int i = 0; i < card.AttackEvent.Count; i++)
-            {
-                var eventId = card.AttackEvent[i];
-                if (string.IsNullOrEmpty(eventId))
-                    continue;
-
-                Debug.Log($"[Combat] 공격 추가효과 예약: {eventId}");
-                damage = ApplySingleAttackEvent(attacker, defender, card, eventId, damage);
-            }
-
-            return Mathf.Max(0, damage);
-        }
-
-        private int ApplySingleAttackEvent(
-            CharacterBase attacker,
-            CharacterBase defender,
-            CardData card,
-            string eventId,
-            int damage)
-        {
-            return damage;
         }
 
         private void ConsumePlayedCard(
