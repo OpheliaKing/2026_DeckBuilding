@@ -58,6 +58,8 @@ namespace SHIN
                 "Assets/Addressables/Prefab/UI/InventoryUI.prefab";
             public const string OptionUIPrefab =
                 "Assets/Addressables/Prefab/UI/OptionUI.prefab";
+            public const string CharacterStatusUIPrefab =
+                "Assets/Addressables/Prefab/UI/CharacterStatusUI.prefab";
             public const string NotoSansKrRegularFont =
                 "Assets/Addressables/Font/NotoSansKR-Regular SDF.asset";
             public const string GowunBatangRegularFont =

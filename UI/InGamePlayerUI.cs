@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Michsky.UI.Heat;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -55,6 +56,30 @@ namespace SHIN
         [SerializeField]
         private Button _endTurnButton;
 
+        [Header("Character Status")]
+        [SerializeField]
+        private Button _characterStatusButton;
+
+        [SerializeField]
+        [Tooltip("사람 아이콘을 넣을 Image 슬롯 (비워두고 나중에 스프라이트 지정)")]
+        private Image _characterStatusIconSlot;
+
+        [Header("Player HP")]
+        [SerializeField]
+        private RectTransform _hpBarParent;
+
+        [SerializeField]
+        [Tooltip("몬스터와 동일: Heat Health Bar 프리팹")]
+        private GameObject _healthBarPrefab;
+
+        [SerializeField]
+        private Color _hpBarColor = new Color(0.92f, 0.18f, 0.22f, 1f);
+
+        [SerializeField]
+        [Tooltip("HUD용 스케일 (원본 240x40 기준)")]
+        private float _hpBarHudScale = 1.35f;
+
+        private ProgressBar _hpProgressBar;
         private UnitInfo _currentUnitInfo;
         private readonly List<GameObject> _handCardObjects = new();
         private int _refreshVersion;
@@ -74,6 +99,8 @@ namespace SHIN
                 _endTurnButton = GetComponentInChildren<Button>(true);
 
             WireEndTurnButton();
+            WireCharacterStatusButton();
+            EnsurePlayerHealthBar();
 
             if (_costWarningText != null)
                 _costWarningText.gameObject.SetActive(false);
@@ -146,14 +173,15 @@ namespace SHIN
         }
 
         /// <summary>
-        /// 코스트/덱/버림 등 HUD만 갱신합니다.
+        /// 코스트/덱/버림/HP 등 HUD만 갱신합니다.
         /// </summary>
         public void RefreshHud()
         {
-            UnitInfo unit = _currentUnitInfo;
+            UnitInfo unit = ResolveHudUnitInfo();
             int current = unit != null ? unit.CurrentCardCost : 0;
             int max = unit != null ? unit.MaxCardCost : 0;
             RefreshCostDisplay(current, max);
+            RefreshHpDisplay(unit);
 
             if (_deckCountText != null)
                 _deckCountText.text = $"덱 {unit?.DrawPile?.Count ?? 0}";
@@ -163,6 +191,183 @@ namespace SHIN
 
             if (_handCountText != null)
                 _handCountText.text = $"손패 {unit?.Hand?.Count ?? _handCardObjects.Count}";
+        }
+
+        /// <summary>
+        /// 플레이어 피해/회복 직후 HP HUD만 갱신합니다.
+        /// </summary>
+        public void RefreshHpUI()
+        {
+            RefreshHpDisplay(ResolveHudUnitInfo());
+        }
+
+        private void RefreshHpDisplay(UnitInfo unit)
+        {
+            EnsurePlayerHealthBar();
+            if (_hpProgressBar == null)
+                return;
+
+            int maxHp = 0;
+            int currentHp = 0;
+            if (unit != null)
+            {
+                maxHp = Mathf.Max(1, unit.MaxHp);
+                currentHp = Mathf.Clamp(unit.CurrentHp, 0, maxHp);
+            }
+            else
+            {
+                maxHp = 1;
+            }
+
+            _hpProgressBar.maxValue = maxHp;
+            _hpProgressBar.maxValueLimit = maxHp;
+            _hpProgressBar.minValue = 0f;
+            _hpProgressBar.SetValue(currentHp);
+        }
+
+        private void EnsurePlayerHealthBar()
+        {
+            if (_hpProgressBar != null)
+                return;
+
+            if (_healthBarPrefab == null || _hpBarParent == null)
+            {
+                Debug.LogWarning("[InGamePlayerUI] Health Bar 프리팹 또는 부모가 없습니다.");
+                return;
+            }
+
+            GameObject instance = Instantiate(_healthBarPrefab, _hpBarParent, false);
+            instance.name = "HealthBar";
+
+            var rect = instance.GetComponent<RectTransform>();
+            if (rect != null)
+            {
+                rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.anchoredPosition = Vector2.zero;
+                rect.localRotation = Quaternion.identity;
+                rect.localScale = Vector3.one * Mathf.Max(0.1f, _hpBarHudScale);
+            }
+
+            DisableRaycasts(instance);
+            HideHealthBarIcons(instance);
+            ApplyHealthBarAccentColor(instance, _hpBarColor);
+
+            _hpProgressBar = instance.GetComponent<ProgressBar>();
+            if (_hpProgressBar == null)
+                _hpProgressBar = instance.GetComponentInChildren<ProgressBar>(true);
+
+            if (_hpProgressBar == null)
+            {
+                Debug.LogError("[InGamePlayerUI] ProgressBar를 찾을 수 없습니다.");
+                Destroy(instance);
+                return;
+            }
+
+            _hpProgressBar.addPrefix = false;
+            _hpProgressBar.addSuffix = false;
+            _hpProgressBar.decimals = 0;
+            _hpProgressBar.minValue = 0f;
+            _hpProgressBar.Initialize();
+
+            ApplyHpBarFonts();
+        }
+
+        private void ApplyHpBarFonts()
+        {
+            if (_hpProgressBar == null)
+                return;
+
+            // Heat 기본 폰트 대신 프로젝트 본문 폰트
+            var texts = _hpProgressBar.GetComponentsInChildren<TextMeshProUGUI>(true);
+            for (int i = 0; i < texts.Length; i++)
+                UiFont.ApplyBody(texts[i]);
+        }
+
+        private static void ApplyHealthBarAccentColor(GameObject root, Color accent)
+        {
+            if (root == null)
+                return;
+
+            var images = root.GetComponentsInChildren<Image>(true);
+            for (int i = 0; i < images.Length; i++)
+            {
+                Image image = images[i];
+                if (image == null || !IsHeatAccentColor(image.color))
+                    continue;
+
+                Color c = accent;
+                c.a = image.color.a;
+                image.color = c;
+            }
+
+            var texts = root.GetComponentsInChildren<TMP_Text>(true);
+            for (int i = 0; i < texts.Length; i++)
+            {
+                TMP_Text text = texts[i];
+                if (text == null || !IsHeatAccentColor(text.color))
+                    continue;
+
+                Color c = accent;
+                c.a = text.color.a;
+                text.color = c;
+            }
+        }
+
+        private static bool IsHeatAccentColor(Color color)
+        {
+            // Heat Health Bar 기본 오렌지(1, 0.686, 0) 근처만 교체
+            return color.r > 0.85f &&
+                   color.g > 0.45f && color.g < 0.85f &&
+                   color.b < 0.25f;
+        }
+
+        private static void DisableRaycasts(GameObject root)
+        {
+            var graphics = root.GetComponentsInChildren<Graphic>(true);
+            for (int i = 0; i < graphics.Length; i++)
+                graphics[i].raycastTarget = false;
+        }
+
+        private static void HideHealthBarIcons(GameObject root)
+        {
+            var transforms = root.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < transforms.Length; i++)
+            {
+                string n = transforms[i].name;
+                if (n.IndexOf("Icon", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    transforms[i].gameObject.SetActive(false);
+            }
+        }
+
+        private UnitInfo ResolveHudUnitInfo()
+        {
+            if (_currentUnitInfo != null)
+                return _currentUnitInfo;
+
+            var inGame = GameManager.Instance?.InGameManager;
+            if (inGame == null)
+                return null;
+
+            var current = inGame.CurrentActor;
+            if (current?.UnitInfo != null &&
+                current.UnitInfo.UnitType == UNIT_TYPE.PLAYER)
+            {
+                return current.UnitInfo;
+            }
+
+            var players = inGame.PlayerCharacters;
+            if (players == null)
+                return null;
+
+            for (int i = 0; i < players.Count; i++)
+            {
+                var character = players[i];
+                if (character?.UnitInfo != null && character.IsAlive)
+                    return character.UnitInfo;
+            }
+
+            return players.Count > 0 ? players[0]?.UnitInfo : null;
         }
 
         public void RefreshCostUI()
@@ -552,6 +757,32 @@ namespace SHIN
             _endTurnButton.onClick.AddListener(OnClickEndTurn);
         }
 
+        private void WireCharacterStatusButton()
+        {
+            if (_characterStatusButton == null)
+                return;
+
+            _characterStatusButton.onClick.RemoveListener(OnClickCharacterStatus);
+            _characterStatusButton.onClick.AddListener(OnClickCharacterStatus);
+        }
+
+        private void OnClickCharacterStatus()
+        {
+            var uiManager = GameManager.Instance?.UIManager;
+            if (uiManager == null)
+            {
+                Debug.LogError("[InGamePlayerUI] UIManager가 없습니다.");
+                return;
+            }
+
+            GameManager.Instance?.SoundManager?.PlaySe(PublicVariable.Address.UiButtonClickSe);
+            uiManager.Show(PublicVariable.Address.CharacterStatusUIPrefab, ui =>
+            {
+                if (ui is CharacterStatusUI statusUi)
+                    statusUi.Refresh();
+            });
+        }
+
         private void OnClickEndTurn()
         {
             var inGame = GameManager.Instance?.InGameManager;
@@ -571,6 +802,7 @@ namespace SHIN
             UiFont.ApplyBody(_discardCountText);
             UiFont.ApplyBody(_handCountText);
             UiFont.ApplyBody(_costWarningText);
+            ApplyHpBarFonts();
 
             if (_endTurnButton != null)
             {

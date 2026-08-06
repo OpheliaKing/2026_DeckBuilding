@@ -76,6 +76,7 @@ namespace SHIN
                 ShowDamageText(applied);
 
             RefreshHealthBar();
+            RefreshPlayerHudHp();
             if (IsDead)
                 SetHealthBarVisible(false);
 
@@ -120,8 +121,19 @@ namespace SHIN
 
             int healed = _unitInfo.ApplyHeal(Mathf.Max(0, amount));
             if (healed > 0)
+            {
                 RefreshHealthBar();
+                RefreshPlayerHudHp();
+            }
             return healed;
+        }
+
+        private void RefreshPlayerHudHp()
+        {
+            if (_unitInfo == null || _unitInfo.UnitType != UNIT_TYPE.PLAYER)
+                return;
+
+            GameManager.Instance?.InGameManager?.PlayerUI?.RefreshHpUI();
         }
 
         /// <summary>
