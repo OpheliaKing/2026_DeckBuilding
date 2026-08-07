@@ -9,6 +9,12 @@ namespace SHIN
         World = 1,
     }
 
+    public enum SkillCameraCueAction
+    {
+        Play = 0,
+        Release = 1,
+    }
+
     /// <summary>
     /// Animator 상태에 붙여 전투 판정을 보냅니다.
     /// 여러 State를 하나의 논리 애니로 묶을 때 AnimName을 같게 설정하세요. (예: Attack001)
@@ -48,6 +54,30 @@ namespace SHIN
             public Vector3 RotationOffset;
         }
 
+        [Serializable]
+        public class SkillCameraCue
+        {
+            [Range(0f, 1f)]
+            [Tooltip("상태 normalizedTime (0~1)")]
+            public float NormalizedTime;
+
+            public SkillCameraCueAction Action = SkillCameraCueAction.Play;
+
+            [Tooltip("Play 시 Addressables 경로. 비면 카드 SkillCameraPath를 사용한다.")]
+            public string CameraAddress;
+        }
+
+        [Serializable]
+        public class CameraShakeCue
+        {
+            [Range(0f, 1f)]
+            [Tooltip("상태 normalizedTime (0~1)")]
+            public float NormalizedTime = 0.5f;
+
+            [Tooltip("공격 Hit와 동일한 CameraShakeLevel (Level1~3)")]
+            public CameraShakeLevel Level = CameraShakeLevel.Level1;
+        }
+
         [Header("Logical Anim")]
         [Tooltip("카드 AnimationName과 동일한 논리 이름. 비우면 Animator State 이름을 사용합니다.")]
         [SerializeField]
@@ -68,6 +98,16 @@ namespace SHIN
         [SerializeField]
         private ParticleCue[] _particleCues = Array.Empty<ParticleCue>();
 
+        [Header("Skill Camera Timings")]
+        [Tooltip("normalizedTime 순으로 스킬 Virtual Camera Play/Release.")]
+        [SerializeField]
+        private SkillCameraCue[] _skillCameraCues = Array.Empty<SkillCameraCue>();
+
+        [Header("Camera Shake Timings")]
+        [Tooltip("normalizedTime 순으로 카메라 흔들림. 공격 Hit와 같은 Level1~3 프리셋.")]
+        [SerializeField]
+        private CameraShakeCue[] _cameraShakeCues = Array.Empty<CameraShakeCue>();
+
         public string AnimName => _animName;
 
         private CharacterBase _character;
@@ -75,6 +115,8 @@ namespace SHIN
         private bool _setupSent;
         private int _nextCueIndex;
         private int _nextParticleCueIndex;
+        private int _nextSkillCameraCueIndex;
+        private int _nextCameraShakeCueIndex;
         private float _lastNormalizedTime;
 
         public override void OnStateEnter(Animator animator, AnimatorStateInfo stateInfo, int layerIndex)
@@ -83,11 +125,15 @@ namespace SHIN
             _setupSent = false;
             _nextCueIndex = 0;
             _nextParticleCueIndex = 0;
+            _nextSkillCameraCueIndex = 0;
+            _nextCameraShakeCueIndex = 0;
             _lastNormalizedTime = 0f;
             _resolvedAnimName = ResolveAnimName(stateInfo);
 
             SortJudgmentsByTime();
             SortParticleCuesByTime();
+            SortSkillCameraCuesByTime();
+            SortCameraShakeCuesByTime();
 
             if (_character != null && !string.IsNullOrEmpty(_resolvedAnimName))
                 _character.NotifyCombatAnimEnter(_resolvedAnimName);
@@ -102,7 +148,9 @@ namespace SHIN
 
             bool hasJudgments = _judgments != null && _judgments.Length > 0;
             bool hasParticleCues = _particleCues != null && _particleCues.Length > 0;
-            if (!hasJudgments && !hasParticleCues)
+            bool hasSkillCameraCues = _skillCameraCues != null && _skillCameraCues.Length > 0;
+            bool hasCameraShakeCues = _cameraShakeCues != null && _cameraShakeCues.Length > 0;
+            if (!hasJudgments && !hasParticleCues && !hasSkillCameraCues && !hasCameraShakeCues)
                 return;
 
             float t = stateInfo.normalizedTime;
@@ -111,6 +159,8 @@ namespace SHIN
             {
                 _nextCueIndex = 0;
                 _nextParticleCueIndex = 0;
+                _nextSkillCameraCueIndex = 0;
+                _nextCameraShakeCueIndex = 0;
                 _setupSent = false;
                 SendSetup();
             }
@@ -118,7 +168,7 @@ namespace SHIN
             float cycleTime = t - Mathf.Floor(t);
             _lastNormalizedTime = t;
 
-            while (_nextCueIndex < _judgments.Length)
+            while (hasJudgments && _nextCueIndex < _judgments.Length)
             {
                 var cue = _judgments[_nextCueIndex];
                 if (cycleTime + 1e-4f < cue.NormalizedTime)
@@ -128,7 +178,7 @@ namespace SHIN
                 _nextCueIndex++;
             }
 
-            while (_nextParticleCueIndex < _particleCues.Length)
+            while (hasParticleCues && _nextParticleCueIndex < _particleCues.Length)
             {
                 var cue = _particleCues[_nextParticleCueIndex];
                 if (cue == null)
@@ -142,6 +192,38 @@ namespace SHIN
 
                 SpawnParticle(animator, cue);
                 _nextParticleCueIndex++;
+            }
+
+            while (hasSkillCameraCues && _nextSkillCameraCueIndex < _skillCameraCues.Length)
+            {
+                var cue = _skillCameraCues[_nextSkillCameraCueIndex];
+                if (cue == null)
+                {
+                    _nextSkillCameraCueIndex++;
+                    continue;
+                }
+
+                if (cycleTime + 1e-4f < cue.NormalizedTime)
+                    break;
+
+                FireSkillCameraCue(cue);
+                _nextSkillCameraCueIndex++;
+            }
+
+            while (hasCameraShakeCues && _nextCameraShakeCueIndex < _cameraShakeCues.Length)
+            {
+                var cue = _cameraShakeCues[_nextCameraShakeCueIndex];
+                if (cue == null)
+                {
+                    _nextCameraShakeCueIndex++;
+                    continue;
+                }
+
+                if (cycleTime + 1e-4f < cue.NormalizedTime)
+                    break;
+
+                FireCameraShake(cue.Level);
+                _nextCameraShakeCueIndex++;
             }
         }
 
@@ -223,6 +305,37 @@ namespace SHIN
             return cue != null ? cue.ParticleAddress : null;
         }
 
+        private void FireSkillCameraCue(SkillCameraCue cue)
+        {
+            if (_character == null || cue == null)
+                return;
+
+            var inGame = GameManager.Instance?.InGameManager;
+            if (inGame == null)
+                return;
+
+            if (cue.Action == SkillCameraCueAction.Release)
+            {
+                inGame.OnAnimSkillCameraRelease(_character);
+                return;
+            }
+
+            string address = ResolveSkillCameraAddress(cue);
+            inGame.OnAnimSkillCameraPlay(_character, address);
+        }
+
+        /// <summary>
+        /// 카드 SkillCameraPath가 있으면 우선, 없으면 Cue.CameraAddress.
+        /// </summary>
+        private string ResolveSkillCameraAddress(SkillCameraCue cue)
+        {
+            CardData resolvingCard = GameManager.Instance?.InGameManager?.GetResolvingCard(_character);
+            if (resolvingCard != null && !string.IsNullOrWhiteSpace(resolvingCard.SkillCameraPath))
+                return resolvingCard.SkillCameraPath;
+
+            return cue != null ? cue.CameraAddress : null;
+        }
+
         private static CharacterBase ResolveCharacter(Animator animator)
         {
             if (animator == null)
@@ -249,6 +362,48 @@ namespace SHIN
 
             Array.Sort(
                 _particleCues,
+                (a, b) =>
+                {
+                    if (a == null)
+                        return b == null ? 0 : 1;
+                    if (b == null)
+                        return -1;
+                    return a.NormalizedTime.CompareTo(b.NormalizedTime);
+                });
+        }
+
+        private void SortSkillCameraCuesByTime()
+        {
+            if (_skillCameraCues == null || _skillCameraCues.Length <= 1)
+                return;
+
+            Array.Sort(
+                _skillCameraCues,
+                (a, b) =>
+                {
+                    if (a == null)
+                        return b == null ? 0 : 1;
+                    if (b == null)
+                        return -1;
+                    return a.NormalizedTime.CompareTo(b.NormalizedTime);
+                });
+        }
+
+        private void FireCameraShake(CameraShakeLevel level)
+        {
+            if (level == CameraShakeLevel.None)
+                return;
+
+            GameManager.Instance?.CameraManager?.Shake(level);
+        }
+
+        private void SortCameraShakeCuesByTime()
+        {
+            if (_cameraShakeCues == null || _cameraShakeCues.Length <= 1)
+                return;
+
+            Array.Sort(
+                _cameraShakeCues,
                 (a, b) =>
                 {
                     if (a == null)

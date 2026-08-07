@@ -183,11 +183,14 @@ namespace SHIN
             switch (combatEvent.EventType)
             {
                 case IN_GAME_COMBAT_EVENT_TYPE.HEAL:
+                {
+                    int healAmount = ResolveHealAmount(combatEvent, context, valueMultiplier);
                     ApplyCombatEventHeal(
                         targets,
-                        Mathf.FloorToInt(effectiveValue),
+                        healAmount,
                         context.Origin);
                     break;
+                }
 
                 case IN_GAME_COMBAT_EVENT_TYPE.DRAW_CARD:
                     ApplyCombatEventDraw(targets, Mathf.FloorToInt(effectiveValue));
@@ -205,6 +208,28 @@ namespace SHIN
                         $"targets={targets.Count} (구현 예정)");
                     break;
             }
+        }
+
+        /// <summary>
+        /// CustomString이 DAMAGE_PERCENT이면 context.Damage의 Value%로 회복량을 계산합니다.
+        /// </summary>
+        private static int ResolveHealAmount(
+            InGameCombatEvent combatEvent,
+            CombatEventContext context,
+            float valueMultiplier)
+        {
+            if (combatEvent == null)
+                return 0;
+
+            float mult = Mathf.Max(0f, valueMultiplier);
+            if (string.Equals(combatEvent.CustomString, "DAMAGE_PERCENT", System.StringComparison.Ordinal))
+            {
+                int damage = context != null ? Mathf.Max(0, context.Damage) : 0;
+                float percent = Mathf.Clamp(combatEvent.Value, 0f, 100f);
+                return Mathf.FloorToInt(damage * (percent / 100f) * mult);
+            }
+
+            return Mathf.FloorToInt(combatEvent.Value * mult);
         }
 
         private List<CharacterBase> ResolveCombatEventTargets(

@@ -97,6 +97,8 @@ namespace SHIN
                 "Assets/Addressables/Animator/Player/PlayerAnimator_Bow.controller";
             public const string PlayerUnitPrefab =
                 "Assets/Addressables/Prefab/Unit/Player/PlayerUnit.prefab";
+            public const string BuffSkillCameraPrefab =
+                "Assets/Addressables/Prefab/Camera/Skill/BuffCamera.prefab";
         }
     }
 }

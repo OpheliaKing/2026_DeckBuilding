@@ -48,6 +48,16 @@ namespace SHIN
         private string _animationName;
         public string AnimationName => _animationName;
 
+        /// <summary>
+        /// 스킬 Virtual Camera Addressables 경로.
+        /// CombatAnimStateBehaviour SkillCameraCue(Play)에서 사용한다. 비면 카메라 없음.
+        /// 예: Assets/Addressables/Prefab/Camera/Skill/BuffCamera.prefab
+        /// </summary>
+        [Tooltip("스킬 Virtual Camera Addressables 경로. 비면 카메라 없음.")]
+        [SerializeField]
+        private string _skillCameraPath;
+        public string SkillCameraPath => _skillCameraPath;
+
         #region RESOLVE
 
         /// <summary>

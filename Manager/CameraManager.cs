@@ -1,3 +1,5 @@
+using System;
+using System.Threading.Tasks;
 using Cinemachine;
 using UnityEngine;
 
@@ -22,7 +24,7 @@ namespace SHIN
     }
 
     /// <summary>
-    /// Cinemachine Impulse로 카메라 흔들림을 관리합니다.
+    /// Cinemachine Impulse 흔들림 + 스킬 Virtual Camera 스폰을 관리합니다.
     /// Virtual Camera에 Cinemachine Impulse Listener 확장이 필요합니다.
     /// </summary>
     public class CameraManager : ManagerBase
@@ -51,10 +53,123 @@ namespace SHIN
         [SerializeField]
         private CameraShakeLevel _testShakeLevel = CameraShakeLevel.Level1;
 
+        private SkillCameraController _activeSkillCamera;
+        private int _skillCameraPlayId;
+
+        /// <summary>현재 재생 중인 스킬 카메라. 없으면 null.</summary>
+        public SkillCameraController ActiveSkillCamera => _activeSkillCamera;
+
         private void Awake()
         {
             EnsureImpulseSource();
             WarnIfNoListener();
+        }
+
+        /// <summary>
+        /// Addressables 스킬 카메라 프리팹을 플레이어 루트 자식으로 생성하고 Follow/LookAt을 바인딩합니다.
+        /// 동시에 하나만 유지하며, 새 재생 시 기존 카메라를 해제합니다.
+        /// </summary>
+        public async Task<SkillCameraController> PlaySkillCameraAsync(
+            string address,
+            Transform playerRoot,
+            float? pathPositionSpeedOverride = null)
+        {
+            if (playerRoot == null)
+            {
+                Debug.LogError("[CameraManager] PlaySkillCameraAsync: playerRoot가 null입니다.");
+                return null;
+            }
+
+            if (string.IsNullOrEmpty(address))
+            {
+                Debug.LogError("[CameraManager] PlaySkillCameraAsync: address가 비어 있습니다.");
+                return null;
+            }
+
+            ReleaseSkillCamera();
+            int playId = _skillCameraPlayId;
+
+            var resourceManager = GameManager.Instance?.ResourceManager;
+            if (resourceManager == null)
+            {
+                Debug.LogError("[CameraManager] ResourceManager가 없습니다.");
+                return null;
+            }
+
+            GameObject instance = await resourceManager.InstantiateAsync(
+                address,
+                playerRoot,
+                instantiateInWorldSpace: false);
+
+            // Release가 await 중에 호출되면 이 인스턴스는 폐기
+            if (playId != _skillCameraPlayId)
+            {
+                if (instance != null)
+                    resourceManager.ReleaseInstance(instance);
+                return null;
+            }
+
+            if (instance == null)
+                return null;
+
+            instance.transform.localPosition = Vector3.zero;
+            instance.transform.localRotation = Quaternion.identity;
+            instance.transform.localScale = Vector3.one;
+
+            var controller = instance.GetComponent<SkillCameraController>();
+            if (controller == null)
+                controller = instance.AddComponent<SkillCameraController>();
+
+            if (pathPositionSpeedOverride.HasValue)
+                controller.SetPathPositionSpeed(pathPositionSpeedOverride.Value);
+
+            controller.Bind(playerRoot);
+            _activeSkillCamera = controller;
+            return controller;
+        }
+
+        /// <summary>콜백 방식 PlaySkillCamera.</summary>
+        public void PlaySkillCamera(
+            string address,
+            Transform playerRoot,
+            Action<SkillCameraController> onComplete = null,
+            float? pathPositionSpeedOverride = null)
+        {
+            PlaySkillCameraInternal(address, playerRoot, onComplete, pathPositionSpeedOverride);
+        }
+
+        private async void PlaySkillCameraInternal(
+            string address,
+            Transform playerRoot,
+            Action<SkillCameraController> onComplete,
+            float? pathPositionSpeedOverride)
+        {
+            var controller = await PlaySkillCameraAsync(address, playerRoot, pathPositionSpeedOverride);
+            onComplete?.Invoke(controller);
+        }
+
+        /// <summary>현재 스킬 카메라를 해제하고 전투 카메라로 복귀합니다.</summary>
+        public void ReleaseSkillCamera()
+        {
+            _skillCameraPlayId++;
+
+            if (_activeSkillCamera == null)
+                return;
+
+            var go = _activeSkillCamera.gameObject;
+            _activeSkillCamera.RestorePriority();
+            _activeSkillCamera = null;
+
+            var resourceManager = GameManager.Instance?.ResourceManager;
+            if (resourceManager != null)
+                resourceManager.ReleaseInstance(go);
+            else if (go != null)
+                Destroy(go);
+        }
+
+        private void OnDestroy()
+        {
+            ReleaseSkillCamera();
         }
 
         /// <summary>None이면 무시, Level1~3으로 흔들림</summary>
@@ -132,9 +247,9 @@ namespace SHIN
                 return baseDir * force;
 
             var randomOffset = new Vector3(
-                Random.Range(-_directionRandomness, _directionRandomness),
-                Random.Range(-_directionRandomness, _directionRandomness),
-                Random.Range(-_directionRandomness, _directionRandomness));
+                UnityEngine.Random.Range(-_directionRandomness, _directionRandomness),
+                UnityEngine.Random.Range(-_directionRandomness, _directionRandomness),
+                UnityEngine.Random.Range(-_directionRandomness, _directionRandomness));
 
             return (baseDir + randomOffset).normalized * force;
         }
@@ -188,3 +303,4 @@ namespace SHIN
         }
     }
 }
+

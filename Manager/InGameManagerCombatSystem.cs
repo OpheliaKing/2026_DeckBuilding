@@ -21,7 +21,7 @@ namespace SHIN
         public bool IsBattleEnded => _isBattleEnded;
 
         /// <summary>
-        /// 현재 카드 해석 중인 유저의 CardData. 파티클 오버라이드 등에 사용.
+        /// 현재 카드 해석 중인 유저의 CardData. 파티클/스킬카메라 오버라이드 등에 사용.
         /// </summary>
         public CardData GetResolvingCard(CharacterBase user)
         {
@@ -32,6 +32,34 @@ namespace SHIN
                 return null;
 
             return _resolveSession.Card;
+        }
+
+        /// <summary>
+        /// CombatAnimStateBehaviour SkillCameraCue(Play)에서 호출.
+        /// address가 비면 현재 카드 SkillCameraPath를 사용한다.
+        /// </summary>
+        public void OnAnimSkillCameraPlay(CharacterBase source, string address = null)
+        {
+            if (_resolveSession == null || source == null || source != _resolveSession.User)
+                return;
+
+            string cameraAddress = !string.IsNullOrWhiteSpace(address)
+                ? address
+                : _resolveSession.Card?.SkillCameraPath;
+
+            if (string.IsNullOrWhiteSpace(cameraAddress))
+                return;
+
+            GameManager.Instance?.CameraManager?.PlaySkillCamera(cameraAddress, source.transform);
+        }
+
+        /// <summary>CombatAnimStateBehaviour SkillCameraCue(Release)에서 호출.</summary>
+        public void OnAnimSkillCameraRelease(CharacterBase source)
+        {
+            if (_resolveSession == null || source == null || source != _resolveSession.User)
+                return;
+
+            GameManager.Instance?.CameraManager?.ReleaseSkillCamera();
         }
 
         private sealed class CardResolveSession
@@ -399,6 +427,8 @@ namespace SHIN
 
             if (!hasAnim)
             {
+                // 애니 없는 카드: 카드 SkillCameraPath가 있으면 즉시 Play → 효과 → Finish에서 Release
+                TryPlaySkillCameraForCard(user, card);
                 ApplyImmediateCardEffect(_resolveSession);
                 FinishCardResolve(_resolveSession);
                 DeactivateBuffTargetCameraIfNeeded(card);
@@ -1155,9 +1185,20 @@ namespace SHIN
                 });
             }
 
+            // 애니 Release 누락 대비 안전 해제
+            GameManager.Instance?.CameraManager?.ReleaseSkillCamera();
+
             // 대상 사망은 마지막 Hit 판정에서 이미 처리됨
             if (session.User != null && session.User.IsDead)
                 ProcessDeath(session.User);
+        }
+
+        private static void TryPlaySkillCameraForCard(CharacterBase user, CardData card)
+        {
+            if (user == null || card == null || string.IsNullOrWhiteSpace(card.SkillCameraPath))
+                return;
+
+            GameManager.Instance?.CameraManager?.PlaySkillCamera(card.SkillCameraPath, user.transform);
         }
 
         private bool IsValidTarget(CharacterBase user, CharacterBase target, CardData card)
