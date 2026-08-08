@@ -91,6 +91,20 @@ namespace SHIN
         public bool IsRangeAttack => _isRangeAttack;
 
         /// <summary>
+        /// 공격 접근 방식. Stay=제자리 / TeleportToTarget=대상 앞으로 순간이동 후 공격·복귀.
+        /// </summary>
+        [SerializeField]
+        private CARD_ATTACK_APPROACH _attackApproach = CARD_ATTACK_APPROACH.Stay;
+        public CARD_ATTACK_APPROACH AttackApproach => _attackApproach;
+
+        /// <summary>
+        /// TeleportToTarget일 때 대상 forward 방향으로 떨어질 거리(마진).
+        /// </summary>
+        [SerializeField]
+        private float _teleportMargin = 1.2f;
+        public float TeleportMargin => _teleportMargin;
+
+        /// <summary>
         /// 공격 애니 파티클 오버라이드.
         /// 비어 있지 않으면 CombatAnimStateBehaviour ParticleCue.ParticleAddress 대신 사용한다.
         /// </summary>
@@ -325,6 +339,15 @@ namespace SHIN
         ATTACK_START,
         EACH_HIT,
         ON_KILL,
+    }
+
+    /// <summary>근접 공격 시 위치 연출.</summary>
+    public enum CARD_ATTACK_APPROACH
+    {
+        /// <summary>포메이션 자리에서 그대로 공격.</summary>
+        Stay = 0,
+        /// <summary>대상 forward 기준 마진 위치로 순간이동 → 공격 → 복귀.</summary>
+        TeleportToTarget = 1,
     }
 
     public enum CARD_TYPE

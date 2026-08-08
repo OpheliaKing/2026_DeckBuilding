@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Cinemachine;
 using UnityEngine;
@@ -54,7 +55,13 @@ namespace SHIN
         private CameraShakeLevel _testShakeLevel = CameraShakeLevel.Level1;
 
         private SkillCameraController _activeSkillCamera;
+        private string _activeSkillCameraAddress;
+        private bool _activeSkillCameraFromPool;
         private int _skillCameraPlayId;
+
+        private Transform _skillCameraPoolRoot;
+        private readonly Dictionary<string, Queue<GameObject>> _skillCameraPool = new();
+        private readonly HashSet<string> _preloadedSkillCameraAddresses = new();
 
         /// <summary>현재 재생 중인 스킬 카메라. 없으면 null.</summary>
         public SkillCameraController ActiveSkillCamera => _activeSkillCamera;
@@ -66,8 +73,93 @@ namespace SHIN
         }
 
         /// <summary>
+        /// 전투 시작 시 덱에 있는 스킬 카메라 Address를 비활성 인스턴스로 프리로드합니다.
+        /// Play 시 풀에서 즉시 활성화해 Addressables 대기 프레임을 제거합니다.
+        /// </summary>
+        public async Task PreloadSkillCamerasAsync(IEnumerable<string> addresses)
+        {
+            if (addresses == null)
+                return;
+
+            var resourceManager = GameManager.Instance?.ResourceManager;
+            if (resourceManager == null)
+            {
+                Debug.LogError("[CameraManager] ResourceManager가 없습니다.");
+                return;
+            }
+
+            EnsureSkillCameraPoolRoot();
+
+            var unique = new HashSet<string>();
+            foreach (string address in addresses)
+            {
+                if (!string.IsNullOrWhiteSpace(address))
+                    unique.Add(address);
+            }
+
+            foreach (string address in unique)
+            {
+                if (_preloadedSkillCameraAddresses.Contains(address))
+                    continue;
+
+                if (_skillCameraPool.TryGetValue(address, out var queue) && queue != null && queue.Count > 0)
+                {
+                    _preloadedSkillCameraAddresses.Add(address);
+                    continue;
+                }
+
+                GameObject instance = await resourceManager.InstantiateAsync(
+                    address,
+                    _skillCameraPoolRoot,
+                    instantiateInWorldSpace: false,
+                    startInactive: true);
+
+                if (instance == null)
+                    continue;
+
+                instance.transform.localPosition = Vector3.zero;
+                instance.transform.localRotation = Quaternion.identity;
+                instance.transform.localScale = Vector3.one;
+                instance.SetActive(false);
+                ReturnToPool(address, instance);
+                _preloadedSkillCameraAddresses.Add(address);
+            }
+
+            Debug.Log($"[CameraManager] 스킬 카메라 프리로드 완료: {_preloadedSkillCameraAddresses.Count}종");
+        }
+
+        /// <summary>전투 종료 시 프리로드 풀을 해제합니다.</summary>
+        public void ClearSkillCameraPool()
+        {
+            ReleaseSkillCamera();
+
+            var resourceManager = GameManager.Instance?.ResourceManager;
+            foreach (var pair in _skillCameraPool)
+            {
+                var queue = pair.Value;
+                if (queue == null)
+                    continue;
+
+                while (queue.Count > 0)
+                {
+                    GameObject go = queue.Dequeue();
+                    if (go == null)
+                        continue;
+
+                    if (resourceManager != null)
+                        resourceManager.ReleaseInstance(go);
+                    else
+                        Destroy(go);
+                }
+            }
+
+            _skillCameraPool.Clear();
+            _preloadedSkillCameraAddresses.Clear();
+        }
+
+        /// <summary>
         /// Addressables 스킬 카메라 프리팹을 플레이어 루트 자식으로 생성하고 Follow/LookAt을 바인딩합니다.
-        /// 동시에 하나만 유지하며, 새 재생 시 기존 카메라를 해제합니다.
+        /// 프리로드 풀이 있으면 동기 활성화, 없으면 Addressables Instantiate로 폴백합니다.
         /// </summary>
         public async Task<SkillCameraController> PlaySkillCameraAsync(
             string address,
@@ -89,32 +181,45 @@ namespace SHIN
             ReleaseSkillCamera();
             int playId = _skillCameraPlayId;
 
-            var resourceManager = GameManager.Instance?.ResourceManager;
-            if (resourceManager == null)
+            GameObject instance = null;
+            bool fromPool = TryRentFromPool(address, out instance);
+
+            if (!fromPool)
             {
-                Debug.LogError("[CameraManager] ResourceManager가 없습니다.");
-                return null;
+                var resourceManager = GameManager.Instance?.ResourceManager;
+                if (resourceManager == null)
+                {
+                    Debug.LogError("[CameraManager] ResourceManager가 없습니다.");
+                    return null;
+                }
+
+                instance = await resourceManager.InstantiateAsync(
+                    address,
+                    playerRoot,
+                    instantiateInWorldSpace: false);
+
+                if (playId != _skillCameraPlayId)
+                {
+                    if (instance != null)
+                        resourceManager.ReleaseInstance(instance);
+                    return null;
+                }
             }
-
-            GameObject instance = await resourceManager.InstantiateAsync(
-                address,
-                playerRoot,
-                instantiateInWorldSpace: false);
-
-            // Release가 await 중에 호출되면 이 인스턴스는 폐기
-            if (playId != _skillCameraPlayId)
+            else if (playId != _skillCameraPlayId)
             {
-                if (instance != null)
-                    resourceManager.ReleaseInstance(instance);
+                ReturnToPool(address, instance);
                 return null;
             }
 
             if (instance == null)
                 return null;
 
+            instance.transform.SetParent(playerRoot, false);
             instance.transform.localPosition = Vector3.zero;
             instance.transform.localRotation = Quaternion.identity;
             instance.transform.localScale = Vector3.one;
+            if (!instance.activeSelf)
+                instance.SetActive(true);
 
             var controller = instance.GetComponent<SkillCameraController>();
             if (controller == null)
@@ -125,6 +230,8 @@ namespace SHIN
 
             controller.Bind(playerRoot);
             _activeSkillCamera = controller;
+            _activeSkillCameraAddress = address;
+            _activeSkillCameraFromPool = fromPool;
             return controller;
         }
 
@@ -157,19 +264,79 @@ namespace SHIN
                 return;
 
             var go = _activeSkillCamera.gameObject;
+            string address = _activeSkillCameraAddress;
+            bool fromPool = _activeSkillCameraFromPool;
+
             _activeSkillCamera.RestorePriority();
             _activeSkillCamera = null;
+            _activeSkillCameraAddress = null;
+            _activeSkillCameraFromPool = false;
+
+            if (go == null)
+                return;
+
+            if (fromPool && !string.IsNullOrEmpty(address))
+            {
+                go.SetActive(false);
+                ReturnToPool(address, go);
+                return;
+            }
 
             var resourceManager = GameManager.Instance?.ResourceManager;
             if (resourceManager != null)
                 resourceManager.ReleaseInstance(go);
-            else if (go != null)
+            else
                 Destroy(go);
+        }
+
+        private bool TryRentFromPool(string address, out GameObject instance)
+        {
+            instance = null;
+            if (!_skillCameraPool.TryGetValue(address, out var queue) || queue == null)
+                return false;
+
+            while (queue.Count > 0)
+            {
+                instance = queue.Dequeue();
+                if (instance != null)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private void ReturnToPool(string address, GameObject instance)
+        {
+            if (instance == null || string.IsNullOrEmpty(address))
+                return;
+
+            EnsureSkillCameraPoolRoot();
+            instance.SetActive(false);
+            instance.transform.SetParent(_skillCameraPoolRoot, false);
+
+            if (!_skillCameraPool.TryGetValue(address, out var queue) || queue == null)
+            {
+                queue = new Queue<GameObject>();
+                _skillCameraPool[address] = queue;
+            }
+
+            queue.Enqueue(instance);
+        }
+
+        private void EnsureSkillCameraPoolRoot()
+        {
+            if (_skillCameraPoolRoot != null)
+                return;
+
+            var go = new GameObject("SkillCameraPool");
+            go.transform.SetParent(transform, false);
+            go.SetActive(false);
+            _skillCameraPoolRoot = go.transform;
         }
 
         private void OnDestroy()
         {
-            ReleaseSkillCamera();
+            ClearSkillCameraPool();
         }
 
         /// <summary>None이면 무시, Level1~3으로 흔들림</summary>

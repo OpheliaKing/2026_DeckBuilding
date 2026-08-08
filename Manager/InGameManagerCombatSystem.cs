@@ -422,6 +422,8 @@ namespace SHIN
                     0);
             }
 
+            bool teleported = TryBeginAttackTeleport(user, target, card, out Vector3 originPos, out Quaternion originRot);
+
             bool hasAnim = !string.IsNullOrEmpty(card.AnimationName) &&
                            user.TryPlayCardAnimation(card.AnimationName);
 
@@ -432,6 +434,7 @@ namespace SHIN
                 ApplyImmediateCardEffect(_resolveSession);
                 FinishCardResolve(_resolveSession);
                 DeactivateBuffTargetCameraIfNeeded(card);
+                EndAttackTeleport(user, teleported, originPos, originRot);
                 _resolveSession = null;
                 _isResolvingCard = false;
                 yield break;
@@ -452,8 +455,70 @@ namespace SHIN
 
             FinishCardResolve(_resolveSession);
             DeactivateBuffTargetCameraIfNeeded(card);
+            EndAttackTeleport(user, teleported, originPos, originRot);
             _resolveSession = null;
             _isResolvingCard = false;
+        }
+
+        /// <summary>
+        /// TeleportToTarget 카드면 대상 forward * margin 앞으로 이동하고 대상을 바라본다.
+        /// </summary>
+        private static bool TryBeginAttackTeleport(
+            CharacterBase user,
+            CharacterBase target,
+            CardData card,
+            out Vector3 originPos,
+            out Quaternion originRot)
+        {
+            originPos = default;
+            originRot = default;
+
+            if (user == null || target == null || card == null)
+                return false;
+
+            if (card.CardType != CARD_TYPE.ATTACK ||
+                card.AttackApproach != CARD_ATTACK_APPROACH.TeleportToTarget)
+                return false;
+
+            // 범위 공격은 제자리 유지 (다수 대상 연출과 충돌)
+            if (card.IsRangeAttack)
+                return false;
+
+            Transform userTf = user.transform;
+            Transform targetTf = target.transform;
+            originPos = userTf.position;
+            originRot = userTf.rotation;
+
+            float margin = Mathf.Max(0f, card.TeleportMargin);
+            Vector3 forward = targetTf.forward;
+            forward.y = 0f;
+            if (forward.sqrMagnitude < 1e-6f)
+                forward = Vector3.forward;
+            else
+                forward.Normalize();
+
+            Vector3 engagePos = targetTf.position + forward * margin;
+            engagePos.y = originPos.y;
+            userTf.position = engagePos;
+
+            Vector3 lookDir = targetTf.position - userTf.position;
+            lookDir.y = 0f;
+            if (lookDir.sqrMagnitude > 1e-6f)
+                userTf.rotation = Quaternion.LookRotation(lookDir.normalized, Vector3.up);
+
+            return true;
+        }
+
+        private static void EndAttackTeleport(
+            CharacterBase user,
+            bool teleported,
+            Vector3 originPos,
+            Quaternion originRot)
+        {
+            if (!teleported || user == null)
+                return;
+
+            user.transform.SetPositionAndRotation(originPos, originRot);
         }
 
         private void DeactivateBuffTargetCameraIfNeeded(CardData card)

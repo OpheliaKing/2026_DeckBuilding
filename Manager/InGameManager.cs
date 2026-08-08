@@ -313,6 +313,7 @@ namespace SHIN
 
             await EnsurePlayerUIAsync();
             InitCombatDecks();
+            await PreloadBattleSkillCamerasAsync();
             InitTurnSystem();
 
             // 캐릭터·PlayerUI·턴 준비 완료 후 페이드인 → 전투 BGM (첫 턴 진행 전)
@@ -321,6 +322,49 @@ namespace SHIN
 
             await BattleStartTimingAsync();
             StartNextTurn();
+        }
+
+        /// <summary>
+        /// 아군/적 덱의 SkillCameraPath를 모아 전투 중 지연 없이 쓰도록 프리로드합니다.
+        /// </summary>
+        private async Task PreloadBattleSkillCamerasAsync()
+        {
+            var cameraManager = GameManager.Instance?.CameraManager;
+            if (cameraManager == null)
+                return;
+
+            var addresses = new HashSet<string>();
+            CollectSkillCameraPaths(_playerCharacters, addresses);
+            CollectSkillCameraPaths(_enemyCharacters, addresses);
+
+            if (addresses.Count == 0)
+                return;
+
+            await cameraManager.PreloadSkillCamerasAsync(addresses);
+        }
+
+        private static void CollectSkillCameraPaths(
+            IReadOnlyList<CharacterBase> characters,
+            HashSet<string> addresses)
+        {
+            if (characters == null || addresses == null)
+                return;
+
+            for (int i = 0; i < characters.Count; i++)
+            {
+                var unitInfo = characters[i]?.UnitInfo;
+                if (unitInfo?.DeckCardList == null)
+                    continue;
+
+                for (int c = 0; c < unitInfo.DeckCardList.Count; c++)
+                {
+                    CardData card = unitInfo.DeckCardList[c];
+                    if (card == null || string.IsNullOrWhiteSpace(card.SkillCameraPath))
+                        continue;
+
+                    addresses.Add(card.SkillCameraPath);
+                }
+            }
         }
 
         private async Task EnsurePlayerUIAsync()
@@ -401,6 +445,7 @@ namespace SHIN
 
         private void OnDestroy()
         {
+            GameManager.Instance?.CameraManager?.ClearSkillCameraPool();
             ReleasePlayerUI();
         }
 
