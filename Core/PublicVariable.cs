@@ -26,6 +26,8 @@ namespace SHIN
                 "Assets/Art/Image/UI/scarlet_stage_soft_button.png";
             public const string StageMapPanelSprite =
                 "Assets/Art/Image/UI/scarlet_stage_map_panel.png";
+            public const string CardNameBannerSprite =
+                "Assets/Art/Image/UI/scarlet_card_name_banner.png";
             public const string PlayerUIPrefab = "Assets/Addressables/Prefab/UI/PlayerUI.prefab";
             public const string StageNodeUIPrefab = "Assets/Addressables/Prefab/UI/Stage/StageNodeUI.prefab";
             public const string StageNodeObjectUIPrefab = "Assets/Addressables/Prefab/UI/Stage/StageNodeObjectUI.prefab";

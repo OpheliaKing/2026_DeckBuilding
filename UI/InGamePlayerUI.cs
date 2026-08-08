@@ -84,6 +84,7 @@ namespace SHIN
         private readonly List<GameObject> _handCardObjects = new();
         private int _refreshVersion;
         private float _costWarningHideAt;
+        private CardNameBannerUI _cardNameBanner;
 
         /// <summary>
         /// Addressables 생성 직후 한 프레임 노출을 막기 위한 비활성 부모.
@@ -101,6 +102,7 @@ namespace SHIN
             WireEndTurnButton();
             WireCharacterStatusButton();
             EnsurePlayerHealthBar();
+            EnsureCardNameBanner();
 
             if (_costWarningText != null)
                 _costWarningText.gameObject.SetActive(false);
@@ -384,6 +386,27 @@ namespace SHIN
             _costWarningText.gameObject.SetActive(true);
             _costWarningHideAt = Time.unscaledTime + 1.6f;
             RefreshCostDisplay(current, max);
+        }
+
+        public void ShowCardName(string cardName)
+        {
+            EnsureCardNameBanner();
+            _cardNameBanner?.Show(cardName);
+        }
+
+        public void HideCardName()
+        {
+            _cardNameBanner?.Hide();
+        }
+
+        private void EnsureCardNameBanner()
+        {
+            if (_cardNameBanner != null)
+                return;
+
+            _cardNameBanner = GetComponentInChildren<CardNameBannerUI>(true);
+            if (_cardNameBanner == null)
+                _cardNameBanner = CardNameBannerUI.Create(transform);
         }
 
         private void RefreshCostDisplay(int current, int max)

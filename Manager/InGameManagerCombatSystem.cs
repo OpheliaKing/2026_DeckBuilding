@@ -402,6 +402,9 @@ namespace SHIN
 
             _isResolvingCard = true;
             _resolveSession = CreateResolveSession(user, target, card, playedCardObject);
+            const float minCardNameBannerSeconds = 0.75f;
+            float cardNameBannerShownAt = Time.unscaledTime;
+            PlayerUI?.ShowCardName(card.Name);
             if (card.CardType == CARD_TYPE.ATTACK)
             {
                 FireItemEffects(ITEM_EFFECT_TIMING.ON_ATTACK_START, new CombatEventContext
@@ -435,6 +438,8 @@ namespace SHIN
                 FinishCardResolve(_resolveSession);
                 DeactivateBuffTargetCameraIfNeeded(card);
                 EndAttackTeleport(user, teleported, originPos, originRot);
+                yield return WaitRemainingCardNameBanner(cardNameBannerShownAt, minCardNameBannerSeconds);
+                PlayerUI?.HideCardName();
                 _resolveSession = null;
                 _isResolvingCard = false;
                 yield break;
@@ -456,8 +461,17 @@ namespace SHIN
             FinishCardResolve(_resolveSession);
             DeactivateBuffTargetCameraIfNeeded(card);
             EndAttackTeleport(user, teleported, originPos, originRot);
+            yield return WaitRemainingCardNameBanner(cardNameBannerShownAt, minCardNameBannerSeconds);
+            PlayerUI?.HideCardName();
             _resolveSession = null;
             _isResolvingCard = false;
+        }
+
+        private static IEnumerator WaitRemainingCardNameBanner(float shownAt, float minSeconds)
+        {
+            float remain = minSeconds - (Time.unscaledTime - shownAt);
+            if (remain > 0f)
+                yield return new WaitForSecondsRealtime(remain);
         }
 
         /// <summary>
@@ -1588,6 +1602,7 @@ namespace SHIN
 
             StopAllAITurns();
             ClearCardSelection();
+            PlayerUI?.HideCardName();
             SetPlayerUIVisible(false);
             PlayerUI?.SetInteractable(false);
             FireItemEffects(ITEM_EFFECT_TIMING.BATTLE_END);
